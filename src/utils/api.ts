@@ -177,7 +177,9 @@ export const productsApi = {
    */
   getBySlug: async (slug: string, lang?: string): Promise<Product> => {
     try {
-      const encodedSlug = slug.includes('%') ? slug : encodeURIComponent(slug);
+      // Decode the slug first if it's URL-encoded, then encode it properly
+      const decodedSlug = decodeURIComponent(slug);
+      const encodedSlug = encodeURIComponent(decodedSlug);
       const params = lang ? { lang } : {};
       const response = await wcApi.get<Product>(`/products/slug/${encodedSlug}`, { params });
       return response.data;
