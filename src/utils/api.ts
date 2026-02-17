@@ -177,13 +177,47 @@ export const productsApi = {
    */
   getBySlug: async (slug: string, lang?: string): Promise<Product> => {
     try {
-      // Decode the slug first if it's URL-encoded, then encode it properly
-      const decodedSlug = decodeURIComponent(slug);
-      const encodedSlug = encodeURIComponent(decodedSlug);
+      // Decode the slug if it's URL-encoded
+      let decodedSlug = slug;
+      try {
+        decodedSlug = decodeURIComponent(slug);
+      } catch (e) {
+        console.warn('Failed to decode slug:', slug);
+      }
+      
+      console.log('Fetching product - Original slug:', slug);
+      console.log('Fetching product - Decoded slug:', decodedSlug);
+      
       const params = lang ? { lang } : {};
-      const response = await wcApi.get<Product>(`/products/slug/${encodedSlug}`, { params });
-      return response.data;
+      
+      try {
+        // Try the direct slug endpoint first
+        const response = await wcApi.get<Product>(`/products/slug/${decodedSlug}`, { params });
+        console.log('Product fetched successfully via slug endpoint');
+        return response.data;
+      } catch (error: any) {
+        // If slug endpoint fails (likely due to Cyrillic characters), 
+        // fall back to fetching all products and finding by slug
+        console.warn('Slug endpoint failed, trying fallback method');
+        
+        const { products } = await productsApi.getAll({ 
+          per_page: 100,
+          search: decodedSlug,
+          lang 
+        });
+        
+        // Find exact match by slug
+        const product = products.find(p => p.slug === decodedSlug);
+        
+        if (!product) {
+          throw new Error(`Product with slug "${decodedSlug}" not found`);
+        }
+        
+        console.log('Product found via fallback method');
+        return product;
+      }
     } catch (error) {
+      console.error('Failed to fetch product:', error);
       return handleApiError(error, `Failed to fetch product with slug "${slug}"`);
     }
   },
