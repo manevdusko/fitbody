@@ -14,6 +14,23 @@ export default function Document() {
   return (
     <Html lang="mk">
       <Head>
+        {/* Single Page Apps for GitHub Pages - Redirect handler */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function(l) {
+                if (l.search[1] === '/' ) {
+                  var decoded = l.search.slice(1).split('&').map(function(s) { 
+                    return s.replace(/~and~/g, '&')
+                  }).join('?');
+                  window.history.replaceState(null, null,
+                      l.pathname.slice(0, -1) + decoded + l.hash
+                  );
+                }
+              }(window.location))
+            `,
+          }}
+        />
         <link rel="icon" href={getFaviconPath("/favicon.svg")} type="image/svg+xml" />
         <link rel="icon" href={getFaviconPath("/favicon.ico")} />
         <link rel="apple-touch-icon" href={getFaviconPath("/apple-touch-icon.png")} />
