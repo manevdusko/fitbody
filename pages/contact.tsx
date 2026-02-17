@@ -70,7 +70,7 @@ const ContactPage: React.FC = () => {
       title: t('pages.about.viberTelegram'),
       value: '070 213 533',
       href: 'tel:+389070213533',
-      description: t('pages.about.viberTelegramDescription')
+      description: t('pages.about.viberTelegram')
     },
     {
       icon: FiMail,
