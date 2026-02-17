@@ -1,5 +1,6 @@
 {
   "common": {
+    "logout": "Одјави се",
     "loading": "Се вчитува...",
     "error": "Грешка",
     "success": "Успешно",
@@ -434,8 +435,8 @@
       "emailDescription": "Испратете ни порака",
       "locationDescription": "Посетете не во нашиот град",
       "workingHours": "Работно време",
-      "workingHoursValue": "Пон-Пет: 09:00-17:00",
-      "workingHoursDescription": "Саб-Нед: 10:00-14:00"
+      "workingHoursValue": "Пон-Саб: 09:00-17:00",
+      "workingHoursDescription": "Недела / неработен"
     },
     "cart": {
       "title": "Кошничка",

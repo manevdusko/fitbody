@@ -1,5 +1,6 @@
 {
   "common": {
+    "logout": "Dil",
     "loading": "Duke u ngarkuar...",
     "error": "Gabim",
     "success": "Sukses",
@@ -434,8 +435,8 @@
       "emailDescription": "Na dërgoni një mesazh",
       "locationDescription": "Na vizitoni në qytetin tonë",
       "workingHours": "Orari i punës",
-      "workingHoursValue": "Hën-Pre: 09:00-17:00",
-      "workingHoursDescription": "Sht-Dje: 10:00-14:00"
+      "workingHoursValue": "Hën-Sht: 09:00-17:00",
+      "workingHoursDescription": "E diel / Mbyllur"
     },
     "cart": {
       "title": "Shporta",

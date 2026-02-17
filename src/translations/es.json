@@ -1,5 +1,6 @@
 {
   "common": {
+    "logout": "Cerrar Sesión",
     "loading": "Cargando...",
     "error": "Error",
     "success": "Éxito",
@@ -434,8 +435,8 @@
       "emailDescription": "Envíanos un mensaje",
       "locationDescription": "Visítanos en nuestra ciudad",
       "workingHours": "Horario de trabajo",
-      "workingHoursValue": "Lun-Vie: 09:00-17:00",
-      "workingHoursDescription": "Sáb-Dom: 10:00-14:00"
+      "workingHoursValue": "Lun-Sáb: 09:00-17:00",
+      "workingHoursDescription": "Domingo / Cerrado"
     },
     "cart": {
       "title": "Carrito",

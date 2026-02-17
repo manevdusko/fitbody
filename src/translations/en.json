@@ -1,5 +1,6 @@
 {
   "common": {
+    "logout": "Logout",
     "loading": "Loading...",
     "error": "Error",
     "success": "Success",
@@ -468,8 +469,8 @@
       "emailDescription": "Send us a message",
       "locationDescription": "Visit us in our city",
       "workingHours": "Working hours",
-      "workingHoursValue": "Mon-Fri: 09:00-17:00",
-      "workingHoursDescription": "Sat-Sun: 10:00-14:00"
+      "workingHoursValue": "Mon-Sat: 09:00-17:00",
+      "workingHoursDescription": "Sunday / Closed"
     },
     "cart": {
       "title": "Cart",
