@@ -14,7 +14,7 @@ const API_DOMAIN = process.env.API_DOMAIN || 'api.fitbody.mk';
 
 // Base path for subdirectory deployment (e.g., GitHub Pages with repo name)
 // Uncomment and set if deploying to https://username.github.io/repo-name/
-const BASE_PATH = '/fitbody';
+const BASE_PATH = '';
 
 const nextConfig = {
   // Enable React strict mode for better development experience
