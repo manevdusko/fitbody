@@ -43,7 +43,7 @@ export const useAuthState = () => {
   const login = async (username: string, password: string) => {
     try {
       setLoading(true);
-      const { user: loggedInUser } = await authApi.login(username, password);
+      const { user: loggedInUser } = await authApi.login({ username, password });
       setUser(loggedInUser);
     } catch (error) {
       console.error('Login failed:', error);
