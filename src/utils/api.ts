@@ -43,21 +43,39 @@ const createApiInstance = (baseURL: string): AxiosInstance => {
     },
   });
 
-  // Request interceptor - add auth token
+  // Request interceptor - add auth token and cart session
   instance.interceptors.request.use(
     (config) => {
       const token = Cookies.get(AUTH_TOKEN_COOKIE);
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
+      
+      // Add cart session token for cart-related requests
+      const cartSession = Cookies.get('cart_session');
+      if (cartSession) {
+        config.headers['X-Cart-Session'] = cartSession;
+      }
+      
       return config;
     },
     (error) => Promise.reject(error)
   );
 
-  // Response interceptor - handle errors
+  // Response interceptor - handle errors and cart session
   instance.interceptors.response.use(
-    (response) => response,
+    (response) => {
+      // Store cart session token from response header
+      const cartSession = response.headers['x-cart-session'];
+      if (cartSession) {
+        Cookies.set('cart_session', cartSession, {
+          expires: 7, // 7 days
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+        });
+      }
+      return response;
+    },
     (error: AxiosError) => {
       // Handle authentication errors
       if (error.response?.status === 401) {
