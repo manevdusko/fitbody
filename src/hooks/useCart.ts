@@ -82,7 +82,7 @@ export const useCartState = () => {
   const addToCart = async (productId: number, quantity: number = 1, variationId?: number, variationData?: { [key: string]: string }) => {
     try {
       setIsLoading(true);
-      const updatedCart = await cartApi.addToCart(productId, quantity, variationId, variationData);
+      const updatedCart = await cartApi.addToCart({ productId, quantity, variationId, variationData });
       
       // Always calculate shipping locally using the updated cart data
       const subtotal = parseFloat(updatedCart.totals?.subtotal || '0');
