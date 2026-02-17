@@ -1207,27 +1207,47 @@ function fitbody_proxy_woocommerce_product_by_slug($request) {
     error_log('Original slug: ' . $slug);
     error_log('Decoded slug: ' . $decoded_slug);
     
-    // Try to find the product with the decoded slug first
-    $post = get_page_by_path($decoded_slug, OBJECT, 'product');
+    // Try using WooCommerce's wc_get_products with slug parameter
+    $products = wc_get_products([
+        'slug' => $decoded_slug,
+        'status' => 'publish',
+        'limit' => 1,
+    ]);
     
     // If not found with decoded slug, try with original slug
-    if (!$post) {
+    if (empty($products)) {
         error_log('Product not found with decoded slug, trying original slug');
-        $post = get_page_by_path($slug, OBJECT, 'product');
+        $products = wc_get_products([
+            'slug' => $slug,
+            'status' => 'publish',
+            'limit' => 1,
+        ]);
     }
     
-    if (!$post || $post->post_status !== 'publish') {
+    // If still not found, try get_page_by_path as fallback
+    if (empty($products)) {
+        error_log('Product not found with wc_get_products, trying get_page_by_path');
+        $post = get_page_by_path($decoded_slug, OBJECT, 'product');
+        
+        if (!$post) {
+            $post = get_page_by_path($slug, OBJECT, 'product');
+        }
+        
+        if ($post && $post->post_status === 'publish') {
+            $product = wc_get_product($post->ID);
+            if ($product) {
+                $products = [$product];
+            }
+        }
+    }
+    
+    if (empty($products)) {
         error_log('Product not found for slug: ' . $slug . ' (decoded: ' . $decoded_slug . ')');
         return new WP_Error('product_not_found', 'Product not found', ['status' => 404]);
     }
     
-    // Get the WooCommerce product object
-    $product = wc_get_product($post->ID);
-    
-    if (!$product) {
-        error_log('WooCommerce product not found for post ID: ' . $post->ID);
-        return new WP_Error('product_not_found', 'Product not found', ['status' => 404]);
-    }
+    // Get the first product
+    $product = $products[0];
     
     error_log('Found product: ' . $product->get_name() . ' (ID: ' . $product->get_id() . ')');
 

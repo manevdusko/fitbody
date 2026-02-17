@@ -130,20 +130,26 @@ export const useProduct = (id?: number, slug?: string) => {
   const { currentLanguage } = useLanguage();
 
   const loadProduct = async () => {
-    if (!id && !slug) return;
+    if (!id && !slug) {
+      console.log('useProduct: No id or slug provided, skipping API call');
+      return;
+    }
 
     try {
       setLoading(true);
       setError(null);
 
+      console.log('useProduct: Loading product with', { id, slug, currentLanguage });
+
       const productData = id 
         ? await productsApi.getById(id, currentLanguage)
         : await productsApi.getBySlug(slug!, currentLanguage);
       
+      console.log('useProduct: Product loaded successfully', productData);
       setProduct(productData);
     } catch (err) {
       setError('Failed to load product');
-      console.error('Error loading product:', err);
+      console.error('useProduct: Error loading product:', err);
     } finally {
       setLoading(false);
     }
