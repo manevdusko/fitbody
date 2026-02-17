@@ -1,0 +1,27 @@
+/* Dealer Section Styles */
+.mobile-dealer-section {
+  padding: 40px 16px;
+  text-align: center;
+}
+
+.mobile-dealer-title {
+  font-size: 2rem;
+  margin-bottom: 16px;
+}
+
+.mobile-dealer-description {
+  font-size: 16px;
+  margin-bottom: 24px;
+}
+
+.mobile-dealer-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mobile-dealer-benefits {
+  grid-template-columns: repeat(1, 1fr);
+  gap: 16px;
+  margin-top: 32px;
+}

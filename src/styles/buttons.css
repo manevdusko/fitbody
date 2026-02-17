@@ -1,0 +1,88 @@
+/* Button Styles */
+.btn-primary {
+  background: var(--primary-blue);
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.btn-primary:hover {
+  background: var(--primary-blue-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(249, 115, 22, 0.3);
+}
+
+.hero-button {
+  background: var(--primary-blue) !important;
+  color: white !important;
+  border: none !important;
+  padding: 1rem 2rem !important;
+  border-radius: 6px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  transition: all 0.3s ease !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-decoration: none !important;
+  font-size: 1.125rem !important;
+}
+
+.hero-button:hover {
+  background: var(--primary-blue-hover) !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 8px 25px rgba(249, 115, 22, 0.3) !important;
+}
+
+/* Mobile button improvements */
+@media (max-width: 640px) {
+  .btn-primary {
+    padding: 12px 20px;
+    font-size: 14px;
+    min-height: 48px;
+  }
+  
+  .btn-mobile-full {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .mobile-btn {
+    min-height: 48px;
+    padding: 12px 20px;
+    font-size: 16px; /* Prevents zoom on iOS */
+  }
+}
+
+/* Touch-friendly improvements */
+@media (hover: none) and (pointer: coarse) {
+  .btn-primary {
+    min-height: 48px;
+    font-size: 16px;
+  }
+  
+  .quantity-btn {
+    min-width: 48px;
+    min-height: 48px;
+  }
+}
+
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

@@ -1,0 +1,142 @@
+# Robots.txt for FitBody.mk - Supplements & Sports Nutrition
+# Optimized for SEO and search engine crawling
+
+User-agent: *
+Allow: /
+
+# Allow all main pages
+Allow: /products
+Allow: /about
+Allow: /contact
+Allow: /promotions
+
+# Disallow admin and private areas
+Disallow: /wp-admin/
+Disallow: /wp-includes/
+Disallow: /wp-content/plugins/
+Disallow: /wp-content/themes/
+Disallow: /wp-json/
+Disallow: /dealer/
+Disallow: /cart
+Disallow: /checkout
+Disallow: /api/
+Disallow: /_next/
+Disallow: /out/
+
+# Disallow search and filter URLs with parameters
+Disallow: /*?*search=*
+Disallow: /*?*utm_*
+Disallow: /*?*ref=*
+Disallow: /*?*fbclid=*
+Disallow: /*?*gclid=*
+
+# Allow specific parameter combinations for products
+Allow: /products?category=*
+Allow: /products/*
+
+# Disallow duplicate content
+Disallow: /products?*&*
+Disallow: /*?page=*
+Disallow: /*?sort=*
+Disallow: /*?filter=*
+
+# Block common spam/hack attempts
+Disallow: /cgi-bin/
+Disallow: /tmp/
+Disallow: /logs/
+Disallow: /.env
+Disallow: /config/
+Disallow: /backup/
+Disallow: /test/
+Disallow: /debug/
+
+# Block file types that shouldn't be indexed
+Disallow: /*.json$
+Disallow: /*.xml$
+Disallow: /*.txt$
+Disallow: /*.log$
+Disallow: /*.sql$
+Disallow: /*.zip$
+Disallow: /*.tar$
+Disallow: /*.gz$
+
+# Allow CSS and JS for proper rendering
+Allow: /*.css$
+Allow: /*.js$
+Allow: /*.png$
+Allow: /*.jpg$
+Allow: /*.jpeg$
+Allow: /*.gif$
+Allow: /*.webp$
+Allow: /*.svg$
+Allow: /*.ico$
+Allow: /*.woff$
+Allow: /*.woff2$
+Allow: /*.ttf$
+
+# Specific rules for major search engines
+User-agent: Googlebot
+Allow: /
+Crawl-delay: 1
+
+User-agent: Bingbot
+Allow: /
+Crawl-delay: 1
+
+User-agent: Slurp
+Allow: /
+Crawl-delay: 2
+
+User-agent: DuckDuckBot
+Allow: /
+Crawl-delay: 1
+
+User-agent: Baiduspider
+Allow: /
+Crawl-delay: 2
+
+User-agent: YandexBot
+Allow: /
+Crawl-delay: 1
+
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: LinkedInBot
+Allow: /
+
+User-agent: WhatsApp
+Allow: /
+
+# Block bad bots and scrapers
+User-agent: AhrefsBot
+Disallow: /
+
+User-agent: MJ12bot
+Disallow: /
+
+User-agent: DotBot
+Disallow: /
+
+User-agent: SemrushBot
+Disallow: /
+
+User-agent: MegaIndex
+Disallow: /
+
+User-agent: BLEXBot
+Disallow: /
+
+User-agent: PetalBot
+Disallow: /
+
+# Sitemap location
+Sitemap: https://fitbody.mk/sitemap.xml
+Sitemap: https://fitbody.mk/sitemap-products.xml
+Sitemap: https://fitbody.mk/sitemap-categories.xml
+
+# Host directive (helps with canonicalization)
+Host: https://fitbody.mk

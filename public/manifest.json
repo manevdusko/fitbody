@@ -1,0 +1,35 @@
+{
+  "name": "FitBody.mk - Производи и Здрава Храна",
+  "short_name": "FitBody.mk",
+  "description": "Водечки дистрибутер на производи и здрава храна во Македонија.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#3B82F6",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "/android-chrome-192x192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/android-chrome-512x512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "type": "image/png",
+      "sizes": "180x180"
+    }
+  ],
+  "categories": ["health", "fitness", "shopping"],
+  "lang": "mk-MK",
+  "dir": "ltr"
+}

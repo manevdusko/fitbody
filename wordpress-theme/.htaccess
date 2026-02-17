@@ -1,0 +1,55 @@
+# wp-content/themes/fitbody-ecommerce/.htaccess
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  
+  # Handle Next.js static assets (_next directory)
+  # Allow direct access to _next static files
+  RewriteCond %{REQUEST_FILENAME} -f
+  RewriteRule ^_next/static/(.*)$ - [L]
+  
+  # Handle other static assets
+  RewriteCond %{REQUEST_FILENAME} -f
+  RewriteRule ^(assets|images)/(.*)$ - [L]
+  
+  # Handle favicon and manifest files
+  RewriteCond %{REQUEST_FILENAME} -f
+  RewriteRule ^(favicon\.(ico|svg)|manifest\.json|robots\.txt)$ - [L]
+</IfModule>
+
+<IfModule mod_headers.c>
+  # Allow long cache on theme static assets
+  <FilesMatch "\.(js|css|png|jpe?g|gif|webp|mp4|svg|ico|json|txt)$">
+    Header set Cache-Control "public, max-age=31536000"
+  </FilesMatch>
+  
+  # Special handling for Next.js chunks
+  <FilesMatch "^_next/static/.*\.(js|css)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+    Header set Access-Control-Allow-Origin "*"
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/css "access plus 1 year"
+  ExpiresByType application/javascript "access plus 1 year"
+  ExpiresByType image/png "access plus 1 year"
+  ExpiresByType image/jpeg "access plus 1 year"
+  ExpiresByType image/webp "access plus 1 year"
+  ExpiresByType video/mp4 "access plus 1 year"
+  ExpiresByType image/x-icon "access plus 1 year"
+  ExpiresByType application/json "access plus 1 year"
+</IfModule>
+
+# Prevent access to sensitive files
+<FilesMatch "\.(php|log|txt)$">
+  Order allow,deny
+  Deny from all
+</FilesMatch>
+
+# Allow specific files
+<FilesMatch "^(robots\.txt|manifest\.json)$">
+  Order allow,deny
+  Allow from all
+</FilesMatch>
