@@ -12,8 +12,7 @@
 // API domain - centralized configuration for WordPress backend
 const API_DOMAIN = process.env.API_DOMAIN || 'api.fitbody.mk';
 
-// Base path for subdirectory deployment (e.g., GitHub Pages with repo name)
-// Uncomment and set if deploying to https://username.github.io/repo-name/
+// Base path - leave empty for custom domain or root deployment
 const BASE_PATH = '';
 
 const nextConfig = {
@@ -28,9 +27,6 @@ const nextConfig = {
   
   // Static export configuration - generates static HTML/CSS/JS
   output: 'export',
-  
-  // Base path for subdirectory deployment
-  basePath: BASE_PATH,
   
   // Image optimization configuration
   images: {
