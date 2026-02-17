@@ -57,7 +57,7 @@ jobs:
         env:
           WORDPRESS_API_URL: https://api.fitbody.mk/wp-json/wp/v2
           WOOCOMMERCE_API_URL: https://api.fitbody.mk/wp-json/wc/v3
-          NEXT_PUBLIC_SITE_URL: https://manevdusko.github.io/fitbody
+          NEXT_PUBLIC_SITE_URL: https://staging.fitbody.mk
           NEXT_PUBLIC_APP_NAME: FitBody.mk
           NEXT_PUBLIC_API_DOMAIN: api.fitbody.mk
           NODE_ENV: production

@@ -12,8 +12,8 @@
 // API domain - centralized configuration for WordPress backend
 const API_DOMAIN = process.env.API_DOMAIN || 'api.fitbody.mk';
 
-// Base path - leave empty for custom domain or root deployment
-const BASE_PATH = '/fitbody';
+// Base path - leave empty since GitHub Pages handles the /fitbody/ path automatically
+const BASE_PATH = '';
 
 const nextConfig = {
   // Enable React strict mode for better development experience
@@ -27,12 +27,6 @@ const nextConfig = {
   
   // Static export configuration - generates static HTML/CSS/JS
   output: 'export',
-  
-  // Base path for GitHub Pages subdirectory deployment
-  basePath: BASE_PATH,
-  
-  // Asset prefix to load assets from correct path
-  assetPrefix: BASE_PATH,
   
   // Image optimization configuration
   images: {
