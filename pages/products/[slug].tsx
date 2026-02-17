@@ -22,8 +22,11 @@ const ProductDetailPage: React.FC = () => {
   const [selectedVariation, setSelectedVariation] = useState<number | null>(null);
   const [selectedAttributes, setSelectedAttributes] = useState<{ [key: string]: string }>({});
   
-  // Fetch product data using the slug
-  const { product, loading, error } = useProduct(undefined, slug as string);
+  // Wait for router to be ready before fetching
+  const isReady = router.isReady;
+  
+  // Fetch product data using the slug (only when router is ready)
+  const { product, loading, error } = useProduct(undefined, isReady ? (slug as string) : undefined);
 
   // Auto-select first variation when product loads
   useEffect(() => {
@@ -194,7 +197,7 @@ const ProductDetailPage: React.FC = () => {
     : null;
 
   // Show loading state
-  if (loading || !slug) {
+  if (!isReady || loading || !slug) {
     return (
       <div className="min-h-screen bg-black pt-16 sm:pt-20 pb-20 flex items-center justify-center">
         <div className="text-white text-lg">{t('common.loadingProduct')}</div>
