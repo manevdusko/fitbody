@@ -1,9 +1,53 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 import { motion } from 'framer-motion';
 
 const NotFoundPage: React.FC = () => {
+  const router = useRouter();
+  const [isChecking, setIsChecking] = useState(true);
+
+  useEffect(() => {
+    // Check if this is a dynamic route that should be handled by Next.js
+    const path = router.asPath;
+    
+    // List of dynamic routes that should be checked
+    const dynamicRoutes = [
+      /^\/products\/[^/]+\/?$/,  // /products/[slug]
+      /^\/blog\/[^/]+\/?$/,       // /blog/[slug]
+    ];
+
+    // Check if the current path matches any dynamic route pattern
+    const isDynamicRoute = dynamicRoutes.some(pattern => pattern.test(path));
+
+    if (isDynamicRoute) {
+      console.log('404 page: Detected dynamic route, forcing router reload:', path);
+      // Force a client-side navigation to the same path
+      // This will trigger the dynamic page component instead of 404
+      router.replace(path).then(() => {
+        console.log('404 page: Router replaced successfully');
+      }).catch((err) => {
+        console.error('404 page: Router replace failed:', err);
+        setIsChecking(false);
+      });
+    } else {
+      // Not a dynamic route, show 404 page
+      setIsChecking(false);
+    }
+  }, [router]);
+
+  // Show loading state while checking
+  if (isChecking) {
+    return (
+      <div className="min-h-screen bg-black text-white flex items-center justify-center px-4">
+        <div className="text-center">
+          <div className="text-lg">Се вчитува...</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       <Head>

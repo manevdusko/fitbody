@@ -46,10 +46,11 @@ const BlogPostPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (router.query.slug) {
+    // Wait for router to be ready before fetching
+    if (router.isReady && router.query.slug) {
       fetchPost(router.query.slug as string);
     }
-  }, [router.query.slug, currentLanguage]);
+  }, [router.isReady, router.query.slug, currentLanguage]);
 
   const fetchPost = async (slug: string) => {
     try {
