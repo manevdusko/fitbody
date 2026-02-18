@@ -6,11 +6,13 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-// Suppress deprecated theme warnings for our hybrid setup
-add_action('init', function() {
-    // Remove the deprecated theme warning for our hybrid Next.js/WordPress setup
-    remove_action('wp_head', '_wp_render_title_tag', 1);
-});
+// Suppress WooCommerce translation warning by ensuring proper load order
+add_action('plugins_loaded', function() {
+    // Ensure WooCommerce is loaded before we use it
+    if (class_exists('WooCommerce')) {
+        // WooCommerce is ready
+    }
+}, 5);
 
 // Ensure theme support is properly declared
 add_action('after_setup_theme', function() {
@@ -91,6 +93,40 @@ function fitbody_theme_setup() {
     add_image_size('product-schema', 800, 800, true); // Product Schema
 }
 add_action('after_setup_theme', 'fitbody_theme_setup');
+
+// ============================================================================
+// REDIRECT API DOMAIN TO MAIN SITE (EXCEPT ADMIN & API)
+// ============================================================================
+
+add_action('template_redirect', function() {
+    // Only redirect if on api.fitbody.mk
+    if ($_SERVER['HTTP_HOST'] !== 'api.fitbody.mk') {
+        return;
+    }
+    
+    // Don't redirect admin panel
+    if (is_admin()) {
+        return;
+    }
+    
+    // Don't redirect REST API requests
+    if (defined('REST_REQUEST') && REST_REQUEST) {
+        return;
+    }
+    
+    // Don't redirect wp-admin, wp-login, wp-json
+    $request_uri = $_SERVER['REQUEST_URI'];
+    if (strpos($request_uri, '/wp-admin') === 0 || 
+        strpos($request_uri, '/wp-login') === 0 || 
+        strpos($request_uri, '/wp-json') === 0) {
+        return;
+    }
+    
+    // Redirect everything else to staging.fitbody.mk
+    $redirect_url = 'https://fitbody.mk' . $request_uri;
+    wp_redirect($redirect_url, 301);
+    exit;
+}, 1);
 
 /**
  * SEO meta tags for WordPress pages
@@ -675,7 +711,8 @@ function fitbody_init_wc_for_rest_api() {
         fitbody_init_woocommerce_for_api();
     }
 }
-add_action('init', 'fitbody_init_wc_for_rest_api');
+// Use wp_loaded instead of init to ensure WooCommerce translations are loaded first
+add_action('wp_loaded', 'fitbody_init_wc_for_rest_api');
 
 /**
  * Proxy WooCommerce products API
@@ -1976,27 +2013,6 @@ function fitbody_create_order($request) {
         return new WP_Error('invalid_email', 'Invalid email format', ['status' => 400]);
     }
 
-    // Check if cart items are provided in the request, but prefer using actual cart contents
-    $use_cart_contents = true;
-    if (empty($order_data['items']) || !is_array($order_data['items'])) {
-        // If no items provided, try to use cart contents
-        fitbody_init_woocommerce_for_api();
-        $cart = WC()->cart;
-        if (!$cart || $cart->is_empty()) {
-            error_log('Order creation failed: No items provided and cart is empty');
-            return new WP_Error('no_items', 'No items provided for the order and cart is empty', ['status' => 400]);
-        }
-    } else {
-        // Items provided, but we'll still prefer cart contents if available for accurate pricing
-        fitbody_init_woocommerce_for_api();
-        $cart = WC()->cart;
-        if ($cart && !$cart->is_empty()) {
-            $use_cart_contents = true;
-        } else {
-            $use_cart_contents = false;
-        }
-    }
-
     try {
         // Create new order
         $order = wc_create_order();
@@ -2018,101 +2034,70 @@ function fitbody_create_order($request) {
             $is_dealer = $is_dealer && $dealer_status === 'approved';
         }
         
-        if ($use_cart_contents && $cart && !$cart->is_empty()) {
-            // Use cart contents (which have dealer pricing applied)
-            error_log('Using cart contents for order creation');
-            foreach ($cart->get_cart() as $cart_item_key => $cart_item) {
-                $product = $cart_item['data'];
-                $quantity = $cart_item['quantity'];
-                
-                if (!$product || !$product->exists()) {
-                    error_log("Product not found in cart: " . $cart_item['product_id']);
-                    continue;
-                }
-                
-                error_log("Adding cart product to order: ID {$cart_item['product_id']}, Quantity {$quantity}, Price: {$product->get_price()}");
-                $item_id = $order->add_product($product, $quantity);
-                
-                if ($item_id) {
-                    $items_added++;
-                    
-                    // The price should already be correct from cart, but ensure dealer pricing is applied
-                    if ($is_dealer && isset($cart_item['dealer_price'])) {
-                        $item = $order->get_item($item_id);
-                        if ($item) {
-                            $item->set_subtotal($cart_item['dealer_price'] * $quantity);
-                            $item->set_total($cart_item['dealer_price'] * $quantity);
-                            $item->save();
-                            error_log("Applied dealer pricing to order item: {$cart_item['dealer_price']}");
-                        }
-                    }
-                } else {
-                    error_log("Failed to add cart product {$cart_item['product_id']} to order");
+        // Get items from CUSTOM DATABASE CART (not WooCommerce cart)
+        $session_token = fitbody_get_session_token();
+        $user_id = $user && $user->ID > 0 ? $user->ID : null;
+        $cart_items = fitbody_get_cart_items($session_token, $user_id);
+        
+        if (empty($cart_items)) {
+            error_log('Order creation failed: Custom cart is empty');
+            $order->delete(true);
+            return new WP_Error('empty_cart', 'Cart is empty', ['status' => 400]);
+        }
+        
+        error_log('Using custom database cart for order creation - ' . count($cart_items) . ' items');
+        
+        foreach ($cart_items as $cart_item) {
+            $product_id = $cart_item->variation_id ?: $cart_item->product_id;
+            $product = wc_get_product($product_id);
+            
+            if (!$product || !$product->exists()) {
+                error_log("Product not found: ID {$product_id}");
+                continue;
+            }
+            
+            $quantity = intval($cart_item->quantity);
+            
+            // Apply dealer pricing if applicable
+            if ($is_dealer) {
+                $dealer_price = get_post_meta($cart_item->product_id, '_dealer_price', true);
+                if ($dealer_price) {
+                    $product->set_price($dealer_price);
                 }
             }
             
-            // Clear the cart after successful order creation
-            $cart->empty_cart();
-        } else {
-            // Fallback: use provided items data
-            error_log('Using provided items data for order creation');
-            foreach ($order_data['items'] as $item_data) {
-                $product_id = intval($item_data['id']);
-                $quantity = intval($item_data['quantity']);
+            error_log("Adding product to order: ID {$product_id}, Quantity {$quantity}, Price: {$product->get_price()}");
+            
+            // Add product to order
+            $item_id = $order->add_product($product, $quantity);
+            
+            if ($item_id) {
+                $items_added++;
                 
-                if ($product_id <= 0 || $quantity <= 0) {
-                    error_log("Skipping invalid item: ID {$product_id}, Quantity {$quantity}");
-                    continue;
-                }
-                
-                $product = wc_get_product($product_id);
-                if (!$product || !$product->exists()) {
-                    error_log("Product not found: ID {$product_id}");
-                    continue;
-                }
-                
-                // Apply dealer pricing if applicable
-                if ($is_dealer) {
-                    $dealer_price = get_post_meta($product_id, '_dealer_price', true);
-                    if ($dealer_price) {
-                        // Create a custom price for this order item
-                        add_filter('woocommerce_product_get_price', function($price, $product_obj) use ($product_id, $dealer_price) {
-                            if ($product_obj->get_id() == $product_id) {
-                                return $dealer_price;
-                            }
-                            return $price;
-                        }, 10, 2);
-                        
-                        add_filter('woocommerce_product_get_regular_price', function($price, $product_obj) use ($product_id, $dealer_price) {
-                            if ($product_obj->get_id() == $product_id) {
-                                return $dealer_price;
-                            }
-                            return $price;
-                        }, 10, 2);
-                    }
-                }
-                
-                error_log("Adding product to order: ID {$product_id}, Quantity {$quantity}");
-                $item_id = $order->add_product($product, $quantity);
-                
-                if ($item_id) {
-                    $items_added++;
-                    
-                    // If dealer pricing was applied, set the custom price on the order item
-                    if ($is_dealer) {
-                        $dealer_price = get_post_meta($product_id, '_dealer_price', true);
-                        if ($dealer_price) {
-                            $item = $order->get_item($item_id);
-                            if ($item) {
-                                $item->set_subtotal($dealer_price * $quantity);
-                                $item->set_total($dealer_price * $quantity);
-                                $item->save();
-                            }
+                // Add variation attributes as order item meta
+                if ($cart_item->variation_id && $cart_item->variation_data) {
+                    $variation_data = json_decode($cart_item->variation_data, true);
+                    if (!empty($variation_data)) {
+                        $item = $order->get_item($item_id);
+                        foreach ($variation_data as $key => $value) {
+                            $item->add_meta_data($key, $value, true);
                         }
+                        $item->save();
+                        error_log("Added variation meta to order item: " . print_r($variation_data, true));
                     }
-                } else {
-                    error_log("Failed to add product {$product_id} to order");
                 }
+                
+                // Apply dealer pricing to order item if needed
+                if ($is_dealer && isset($dealer_price)) {
+                    $item = $order->get_item($item_id);
+                    if ($item) {
+                        $item->set_subtotal($dealer_price * $quantity);
+                        $item->set_total($dealer_price * $quantity);
+                        $item->save();
+                    }
+                }
+            } else {
+                error_log("Failed to add product {$product_id} to order");
             }
         }
 
@@ -2205,8 +2190,14 @@ function fitbody_create_order($request) {
         $cart = WC()->cart;
         if ($cart && !$cart->is_empty()) {
             $cart->empty_cart();
-            error_log('Cart cleared successfully');
+            error_log('WooCommerce cart cleared successfully');
         }
+        
+        // Also clear custom database cart
+        $session_token = fitbody_get_session_token();
+        $user_id = get_current_user_id() ?: null;
+        fitbody_clear_cart($session_token, $user_id);
+        error_log('Custom cart cleared successfully');
 
         // Send order confirmation email (optional, might cause issues)
         try {
@@ -4082,7 +4073,7 @@ function fitbody_send_whatsapp_order_notification($order_id) {
         $success_count = 0;
         foreach ($all_admin_ids as $chat_id) {
             error_log('Sending to admin chat ID: ' . $chat_id);
-            if (fitbody_send_telegram_message($telegram_bot_token, $chat_id, $message)) {
+            if (fitbody_send_telegram_to_chat($telegram_bot_token, $chat_id, $message)) {
                 $success_count++;
             }
         }
@@ -4132,7 +4123,25 @@ function fitbody_format_telegram_order_message($order) {
         $quantity = $item->get_quantity();
         $total = $item->get_total();
         
-        $message .= "• {$product_name} x{$quantity} - " . number_format($total, 0) . " ден\n";
+        // Add variation details if available
+        $variation_text = '';
+        if ($item->get_variation_id()) {
+            $variation_data = $item->get_meta_data();
+            $variations = [];
+            foreach ($variation_data as $meta) {
+                $key = $meta->key;
+                $value = $meta->value;
+                // Skip internal meta keys
+                if (strpos($key, '_') !== 0 && !empty($value)) {
+                    $variations[] = $value;
+                }
+            }
+            if (!empty($variations)) {
+                $variation_text = ' (' . implode(', ', $variations) . ')';
+            }
+        }
+        
+        $message .= "• {$product_name}{$variation_text} x{$quantity} - " . number_format($total, 0) . " ден\n";
     }
     
     // Shipping
@@ -4162,17 +4171,26 @@ function fitbody_format_telegram_order_message($order) {
 }
 
 /**
- * Send Telegram message
+ * Send Telegram message (for contact form - uses main chat ID)
  */
-function fitbody_send_telegram_message($bot_token, $chat_id, $message) {
-    error_log('=== TELEGRAM MESSAGE SEND DEBUG ===');
-    error_log('Bot token length: ' . strlen($bot_token));
-    error_log('Chat ID: ' . $chat_id);
-    error_log('Message length: ' . strlen($message));
+function fitbody_send_telegram_message($message) {
+    // Use FitBody's Telegram settings (same as order notifications)
+    $bot_token = get_option('fitbody_telegram_bot_token', '');
+    $chat_id = get_option('fitbody_telegram_chat_id', '');
     
+    if (empty($bot_token) || empty($chat_id)) {
+        error_log('Telegram credentials not configured. Contact form will only send email.');
+        return false;
+    }
+    
+    return fitbody_send_telegram_to_chat($bot_token, $chat_id, $message);
+}
+
+/**
+ * Send Telegram message to specific chat (for order notifications - multiple admins)
+ */
+function fitbody_send_telegram_to_chat($bot_token, $chat_id, $message) {
     $url = "https://api.telegram.org/bot{$bot_token}/sendMessage";
-    
-    error_log('API URL: ' . $url);
     
     $data = [
         'chat_id' => $chat_id,
@@ -4181,41 +4199,29 @@ function fitbody_send_telegram_message($bot_token, $chat_id, $message) {
         'disable_web_page_preview' => true
     ];
     
-    error_log('Sending to Telegram API...');
-    
     $response = wp_remote_post($url, [
         'body' => $data,
-        'timeout' => 15,
-        'headers' => [
-            'Content-Type' => 'application/x-www-form-urlencoded'
-        ]
+        'timeout' => 15
     ]);
     
     if (is_wp_error($response)) {
-        error_log('Telegram API request error: ' . $response->get_error_message());
+        error_log('Telegram API error: ' . $response->get_error_message());
         return false;
     }
     
     $response_code = wp_remote_retrieve_response_code($response);
-    $response_body = wp_remote_retrieve_body($response);
-    
-    error_log('Telegram API response code: ' . $response_code);
-    error_log('Telegram API response body: ' . $response_body);
     
     if ($response_code === 200) {
-        $result = json_decode($response_body, true);
+        $result = json_decode(wp_remote_retrieve_body($response), true);
         if (isset($result['ok']) && $result['ok'] === true) {
-            error_log('✅ Telegram notification sent successfully to chat ID: ' . $chat_id);
             return true;
-        } else {
-            error_log('Telegram API error: ' . $response_body);
-            return false;
         }
-    } else {
-        error_log('Telegram HTTP error ' . $response_code . ': ' . $response_body);
-        return false;
     }
+    
+    error_log('Telegram send failed with code: ' . $response_code);
+    return false;
 }
+
 
 /**
  * Hook into order creation to send Telegram notification
@@ -6057,7 +6063,7 @@ function fitbody_handle_contact_form($request) {
     $telegram_sent = fitbody_send_telegram_message($telegram_message);
     
     // Send email notification
-    $to = get_option('admin_email', 'fitbody.mk@icloud.com');
+    $to = get_option('admin_email', 'manevdusko@gmail.com');
     $email_subject = 'Нова порака од контакт форма - ' . ($subject ?: 'Општо прашање');
     $email_message = "Име: {$name}\n";
     $email_message .= "Email: {$email}\n";
@@ -6077,47 +6083,4 @@ function fitbody_handle_contact_form($request) {
         'telegram_sent' => $telegram_sent,
         'email_sent' => $email_sent,
     ]);
-}
-
-/**
- * Send message to Telegram
- */
-function fitbody_send_telegram_message($message) {
-    // Telegram Bot configuration
-    // You need to set these in wp-config.php or as WordPress options
-    $bot_token = defined('TELEGRAM_BOT_TOKEN') ? TELEGRAM_BOT_TOKEN : get_option('telegram_bot_token');
-    $chat_id = defined('TELEGRAM_CHAT_ID') ? TELEGRAM_CHAT_ID : get_option('telegram_chat_id');
-    
-    if (empty($bot_token) || empty($chat_id)) {
-        error_log('Telegram credentials not configured');
-        return false;
-    }
-    
-    $url = "https://api.telegram.org/bot{$bot_token}/sendMessage";
-    
-    $data = [
-        'chat_id' => $chat_id,
-        'text' => $message,
-        'parse_mode' => 'Markdown',
-    ];
-    
-    $response = wp_remote_post($url, [
-        'body' => $data,
-        'timeout' => 10,
-    ]);
-    
-    if (is_wp_error($response)) {
-        error_log('Telegram API error: ' . $response->get_error_message());
-        return false;
-    }
-    
-    $body = json_decode(wp_remote_retrieve_body($response), true);
-    
-    if (isset($body['ok']) && $body['ok'] === true) {
-        error_log('Telegram message sent successfully');
-        return true;
-    } else {
-        error_log('Telegram API returned error: ' . print_r($body, true));
-        return false;
-    }
 }
