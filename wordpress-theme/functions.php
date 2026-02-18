@@ -403,6 +403,15 @@ function fitbody_jwt_auth_secret_key($key) {
 add_filter('jwt_auth_secret_key', 'fitbody_jwt_auth_secret_key');
 
 /**
+ * FitBody E-commerce Theme Functions
+ * 
+ * Custom WordPress theme for FitBody.mk e-commerce platform
+ */
+
+// Include custom cart system
+require_once get_template_directory() . '/custom-cart.php';
+
+/**
  * Initialize WooCommerce for REST API requests
  */
 function fitbody_init_woocommerce_for_api() {
@@ -410,24 +419,62 @@ function fitbody_init_woocommerce_for_api() {
         return;
     }
     
-    // Initialize WooCommerce session if not already done
-    if (!WC()->session) {
+    // Get or create session token from request header
+    $session_token = null;
+    $headers = getallheaders();
+    
+    if (isset($headers['X-Cart-Session'])) {
+        $session_token = $headers['X-Cart-Session'];
+    } elseif (isset($_SERVER['HTTP_X_CART_SESSION'])) {
+        $session_token = $_SERVER['HTTP_X_CART_SESSION'];
+    }
+    
+    // Generate new token if none exists
+    if (!$session_token) {
+        $session_token = wp_generate_uuid4();
+    }
+    
+    error_log('Cart session token: ' . $session_token);
+    
+    // Initialize WooCommerce session with custom handler
+    if (!WC()->session || !WC()->session->has_session()) {
         WC()->session = new WC_Session_Handler();
         WC()->session->init();
+        
+        // Set custom session key based on our token
+        WC()->session->set_customer_session_cookie(true);
+        $_COOKIE['wp_woocommerce_session_' . COOKIEHASH] = $session_token;
     }
     
-    if (!WC()->cart) {
-        WC()->cart = new WC_Cart();
-    }
-    
+    // Initialize customer before cart
     if (!WC()->customer) {
         WC()->customer = new WC_Customer();
     }
     
-    // Load cart from session
-    if (WC()->cart && WC()->session) {
+    // Initialize cart
+    if (!WC()->cart) {
+        WC()->cart = new WC_Cart();
+        // Load cart from session after initializing
         WC()->cart->get_cart_from_session();
     }
+    
+    error_log('Cart initialized - Items count: ' . WC()->cart->get_cart_contents_count());
+    error_log('Cart contents: ' . print_r(array_keys(WC()->cart->get_cart()), true));
+    
+    // Store session token for response
+    if (!defined('FITBODY_CART_SESSION')) {
+        define('FITBODY_CART_SESSION', $session_token);
+    }
+}
+
+/**
+ * Add cart session token to response headers
+ */
+function fitbody_add_cart_session_header($response) {
+    if (defined('FITBODY_CART_SESSION')) {
+        $response->header('X-Cart-Session', FITBODY_CART_SESSION);
+    }
+    return $response;
 }
 
 /**
@@ -1204,52 +1251,55 @@ function fitbody_proxy_woocommerce_product_by_slug($request) {
     $decoded_slug = urldecode($slug);
     
     // Log both versions for debugging
+    error_log('=== PRODUCT BY SLUG DEBUG ===');
     error_log('Original slug: ' . $slug);
     error_log('Decoded slug: ' . $decoded_slug);
     
-    // Try using WooCommerce's wc_get_products with slug parameter
-    $products = wc_get_products([
-        'slug' => $decoded_slug,
-        'status' => 'publish',
-        'limit' => 1,
-    ]);
+    // Try using get_page_by_path first (most reliable for exact slug match)
+    $post = get_page_by_path($decoded_slug, OBJECT, 'product');
     
-    // If not found with decoded slug, try with original slug
-    if (empty($products)) {
-        error_log('Product not found with decoded slug, trying original slug');
+    if (!$post) {
+        error_log('Not found with decoded slug, trying original');
+        $post = get_page_by_path($slug, OBJECT, 'product');
+    }
+    
+    $product = null;
+    
+    if ($post && $post->post_status === 'publish') {
+        error_log('Found via get_page_by_path: ' . $post->ID);
+        $product = wc_get_product($post->ID);
+    }
+    
+    // Fallback to wc_get_products if get_page_by_path didn't work
+    if (!$product) {
+        error_log('Trying wc_get_products as fallback');
         $products = wc_get_products([
-            'slug' => $slug,
+            'slug' => $decoded_slug,
             'status' => 'publish',
             'limit' => 1,
         ]);
-    }
-    
-    // If still not found, try get_page_by_path as fallback
-    if (empty($products)) {
-        error_log('Product not found with wc_get_products, trying get_page_by_path');
-        $post = get_page_by_path($decoded_slug, OBJECT, 'product');
         
-        if (!$post) {
-            $post = get_page_by_path($slug, OBJECT, 'product');
+        if (empty($products)) {
+            $products = wc_get_products([
+                'slug' => $slug,
+                'status' => 'publish',
+                'limit' => 1,
+            ]);
         }
         
-        if ($post && $post->post_status === 'publish') {
-            $product = wc_get_product($post->ID);
-            if ($product) {
-                $products = [$product];
-            }
+        if (!empty($products)) {
+            $product = $products[0];
+            error_log('Found via wc_get_products: ' . $product->get_id());
         }
     }
     
-    if (empty($products)) {
+    if (!$product) {
         error_log('Product not found for slug: ' . $slug . ' (decoded: ' . $decoded_slug . ')');
         return new WP_Error('product_not_found', 'Product not found', ['status' => 404]);
     }
     
-    // Get the first product
-    $product = $products[0];
-    
-    error_log('Found product: ' . $product->get_name() . ' (ID: ' . $product->get_id() . ')');
+    error_log('Final product: ' . $product->get_name() . ' (ID: ' . $product->get_id() . ', Slug: ' . $product->get_slug() . ')');
+    error_log('Product image ID: ' . $product->get_image_id());
 
     // Format product for API response
     $dealer_price = get_post_meta($product->get_id(), '_dealer_price', true);
@@ -1627,666 +1677,146 @@ function fitbody_get_featured_products($request) {
 }
 
 function fitbody_proxy_get_cart($request) {
-    if (!function_exists('WC')) {
-        return new WP_Error('woocommerce_not_active', 'WooCommerce is not active', ['status' => 500]);
-    }
-
-    // Initialize WooCommerce
-    fitbody_init_woocommerce_for_api();
-    
-    // CRITICAL: Ensure authentication is called for cart requests
-    fitbody_authenticate_rest_user();
-
-    // Check if user is dealer
-    $is_dealer = false;
+    $session_token = fitbody_get_session_token();
     $user = wp_get_current_user();
+    $user_id = $user && $user->ID > 0 ? $user->ID : null;
     
-    // Debug logging
-    error_log('=== CART API DEBUG ===');
-    error_log('User ID: ' . ($user ? $user->ID : 'none'));
-    error_log('User Email: ' . ($user ? $user->user_email : 'none'));
+    error_log('GET CART - Session: ' . $session_token . ', User ID: ' . ($user_id ?: 'guest'));
     
-    if ($user && $user->ID > 0) {
-        $is_dealer_meta = get_user_meta($user->ID, 'is_dealer', true);
-        $dealer_status = get_user_meta($user->ID, 'dealer_status', true);
-        $is_dealer = $is_dealer_meta === '1' && $dealer_status === 'approved';
-        
-        error_log('Is Dealer Meta: ' . $is_dealer_meta);
-        error_log('Dealer Status: ' . $dealer_status);
-        error_log('Final Is Dealer: ' . ($is_dealer ? 'YES' : 'NO'));
-    } else {
-        error_log('No authenticated user found');
-    }
-
-    // Get cart contents
-    $cart = WC()->cart;
-    if (!$cart) {
-        error_log('WooCommerce cart not initialized');
-        return rest_ensure_response([
-            'items' => [],
-            'totals' => [
-                'subtotal' => '0',
-                'total' => '0',
-                'currency' => get_woocommerce_currency()
-            ]
-        ]);
-    }
-
-    // Force cart calculation to trigger pricing hooks
-    $cart->calculate_totals();
-
-    $cart_items = [];
-    $cart_contents = $cart->get_cart();
+    $cart_data = fitbody_format_cart_response($session_token, $user_id);
     
-    error_log('Cart items count: ' . count($cart_contents));
+    $response = rest_ensure_response($cart_data);
+    $response->header('X-Cart-Session', $session_token);
     
-    // If cart is empty, try to load from transient
-    if (empty($cart_contents)) {
-        $transient_cart = fitbody_load_cart_from_transient();
-        if ($transient_cart && is_array($transient_cart)) {
-            // Restore cart from transient
-            foreach ($transient_cart as $cart_item_key => $cart_item) {
-                $cart->restore_cart_item($cart_item_key, $cart_item);
-            }
-            $cart_contents = $cart->get_cart();
-            error_log('Restored cart from transient, new count: ' . count($cart_contents));
-        }
-    }
-    
-    foreach ($cart_contents as $cart_item_key => $cart_item) {
-        $product = $cart_item['data'];
-        if ($product && $product->exists()) {
-            // Get product image
-            $image_id = $product->get_image_id();
-            $image_url = $image_id ? wp_get_attachment_url($image_id) : '';
-            
-            // Force recalculation of pricing for this cart item
-            $product_id = $cart_item['product_id'];
-            
-            error_log('Processing cart item - Product ID: ' . $product_id . ', Name: ' . $product->get_name());
-            
-            // Get original prices
-            $original_price = $product->get_price();
-            $regular_price = $product->get_regular_price();
-            
-            error_log('Original price: ' . $original_price . ', Regular price: ' . $regular_price);
-            
-            // Use dealer price if applicable
-            $display_price = $original_price;
-            $line_total = $cart_item['line_total'];
-            
-            if ($is_dealer) {
-                $dealer_price = get_post_meta($product_id, '_dealer_price', true);
-                error_log('Dealer price from meta: ' . ($dealer_price ?: 'NOT SET'));
-                
-                if ($dealer_price && is_numeric($dealer_price) && $dealer_price > 0) {
-                    // Override the product price for dealers
-                    $product->set_price($dealer_price);
-                    $display_price = $dealer_price;
-                    $line_total = $dealer_price * $cart_item['quantity'];
-                    error_log('APPLIED DEALER PRICE: ' . $dealer_price . ' for product ' . $product_id);
-                } else {
-                    error_log('Dealer price not valid for product ' . $product_id);
-                }
-            } else {
-                error_log('User is not dealer, checking for promotions...');
-                
-                // Check for promotion pricing for regular users
-                $is_promotion = get_post_meta($product_id, '_is_promotion', true) === 'yes';
-                $promotion_price = get_post_meta($product_id, '_promotion_price', true);
-                $promotion_start_date = get_post_meta($product_id, '_promotion_start_date', true);
-                $promotion_end_date = get_post_meta($product_id, '_promotion_end_date', true);
-                
-                error_log('Promotion check - is_promotion: ' . ($is_promotion ? 'yes' : 'no') . ', price: ' . ($promotion_price ?: 'none'));
-                
-                // Check if promotion is currently active
-                $promotion_active = false;
-                if ($is_promotion && $promotion_price) {
-                    $current_date = current_time('Y-m-d');
-                    $promotion_active = true;
-                    
-                    if ($promotion_start_date && $current_date < $promotion_start_date) {
-                        $promotion_active = false;
-                    }
-                    
-                    if ($promotion_end_date && $current_date > $promotion_end_date) {
-                        $promotion_active = false;
-                    }
-                }
-                
-                if ($promotion_active && $promotion_price && is_numeric($promotion_price)) {
-                    $product->set_price($promotion_price);
-                    $display_price = $promotion_price;
-                    $line_total = $promotion_price * $cart_item['quantity'];
-                    error_log('APPLIED PROMOTION PRICE: ' . $promotion_price . ' for product ' . $product_id);
-                }
-            }
-            
-            error_log('Final display price: ' . $display_price . ', line total: ' . $line_total);
-            
-            $cart_items[] = [
-                'key' => $cart_item_key,
-                'id' => $product_id,
-                'quantity' => $cart_item['quantity'],
-                'name' => $product->get_name(),
-                'price' => $display_price,
-                'total' => $line_total,
-                'variation_id' => isset($cart_item['variation_id']) ? $cart_item['variation_id'] : null,
-                'variation' => isset($cart_item['variation']) ? $cart_item['variation'] : null,
-                'image' => [
-                    'id' => $image_id,
-                    'src' => $image_url,
-                    'alt' => get_post_meta($image_id, '_wp_attachment_image_alt', true) ?: $product->get_name(),
-                ]
-            ];
-        }
-    }
-
-    // Calculate totals with dealer pricing
-    $subtotal = 0;
-    $total = 0;
-    foreach ($cart_items as $item) {
-        $subtotal += floatval($item['total']);
-        $total += floatval($item['total']);
-    }
-    
-    error_log('Final cart totals - Subtotal: ' . $subtotal . ', Total: ' . $total);
-    error_log('=== END CART API DEBUG ===');
-
-    return rest_ensure_response([
-        'items' => $cart_items,
-        'totals' => [
-            'subtotal' => strval($subtotal),
-            'total' => strval($total),
-            'currency' => get_woocommerce_currency()
-        ]
-    ]);
+    return $response;
 }
 
 function fitbody_proxy_add_to_cart($request) {
-    if (!function_exists('WC')) {
-        return new WP_Error('woocommerce_not_active', 'WooCommerce is not active', ['status' => 500]);
-    }
-
     try {
         $product_id = $request->get_param('id');
         $quantity = $request->get_param('quantity') ?: 1;
-        $variation_id = $request->get_param('variation_id') ?: 0;
-        $variation_data = $request->get_param('variation_data') ?: [];
+        $variation_id = $request->get_param('variation_id') ?: null;
+        $variation_data = $request->get_param('variation_data') ?: null;
 
         if (!$product_id) {
             return new WP_Error('missing_product_id', 'Product ID is required', ['status' => 400]);
         }
 
-        // Initialize WooCommerce
-        fitbody_init_woocommerce_for_api();
-        
-        // CRITICAL: Ensure authentication is called for add to cart requests
-        fitbody_authenticate_rest_user();
-
-        // Check if user is dealer and get dealer pricing
-        $is_dealer = false;
+        // Get session token and user
+        $session_token = fitbody_get_session_token();
         $user = wp_get_current_user();
+        $user_id = $user && $user->ID > 0 ? $user->ID : null;
         
-        error_log('=== ADD TO CART DEBUG ===');
-        error_log('User ID: ' . ($user ? $user->ID : 'none'));
-        error_log('Product ID: ' . $product_id);
-        error_log('Variation ID: ' . $variation_id);
-        error_log('Variation Data: ' . print_r($variation_data, true));
-        
-        if ($user && $user->ID > 0) {
-            $is_dealer_meta = get_user_meta($user->ID, 'is_dealer', true);
-            $dealer_status = get_user_meta($user->ID, 'dealer_status', true);
-            $is_dealer = $is_dealer_meta === '1' && $dealer_status === 'approved';
-            
-            error_log('Is Dealer Meta: ' . $is_dealer_meta);
-            error_log('Dealer Status: ' . $dealer_status);
-            error_log('Final Is Dealer: ' . ($is_dealer ? 'YES' : 'NO'));
-        }
+        error_log('ADD TO CART - Session: ' . $session_token . ', User: ' . ($user_id ?: 'guest') . ', Product: ' . $product_id);
 
         // Validate product exists
         $product = wc_get_product($product_id);
         if (!$product || !$product->exists()) {
-            error_log('Product not found: ' . $product_id);
             return new WP_Error('invalid_product', 'Product not found', ['status' => 404]);
         }
 
-        // Check if product is purchasable
-        if (!$product->is_purchasable()) {
-            error_log('Product not purchasable: ' . $product_id);
-            return new WP_Error('product_not_purchasable', 'Product is not available for purchase', ['status' => 400]);
+        // Validate variable products
+        if ($product->is_type('variable') && !$variation_id) {
+            return new WP_Error('missing_variation', 'Variation ID is required for variable products', ['status' => 400]);
         }
 
-        // CRITICAL: Validate variable products
-        if ($product->is_type('variable')) {
-            error_log('Processing variable product: ' . $product_id);
-            
-            // For variable products, variation_id is required
-            if (!$variation_id || $variation_id <= 0) {
-                error_log('Missing variation ID for variable product');
-                return new WP_Error('missing_variation', 'Variation ID is required for variable products', ['status' => 400]);
-            }
-            
-            // Validate variation exists
-            $variation = wc_get_product($variation_id);
-            if (!$variation || !$variation->exists() || $variation->get_parent_id() !== $product_id) {
-                error_log('Invalid variation ID: ' . $variation_id . ' for product: ' . $product_id);
-                return new WP_Error('invalid_variation', 'Invalid variation selected', ['status' => 400]);
-            }
-            
-            // Check if variation is purchasable
-            if (!$variation->is_purchasable()) {
-                error_log('Variation not purchasable: ' . $variation_id);
-                return new WP_Error('variation_not_purchasable', 'Selected variation is not available for purchase', ['status' => 400]);
-            }
-            
-            // Validate required variation attributes
-            $variation_attributes = $variation->get_variation_attributes();
-            if (empty($variation_data) && !empty($variation_attributes)) {
-                error_log('Missing variation data for variable product');
-                return new WP_Error('missing_variation_data', 'Variation attributes are required', ['status' => 400]);
-            }
-            
-            error_log('Variable product validation passed');
-        }
-
-        // Apply dealer pricing if applicable
-        if ($is_dealer) {
-            $dealer_price = get_post_meta($product_id, '_dealer_price', true);
-            if ($dealer_price) {
-                // Store dealer pricing in session for this product
-                WC()->session->set('dealer_pricing_' . $product_id, $dealer_price);
-                
-                // Hook to modify product price for dealers - use higher priority
-                add_filter('woocommerce_product_get_price', function($price, $product_obj) use ($product_id, $dealer_price) {
-                    if ($product_obj->get_id() == $product_id) {
-                        return $dealer_price;
-                    }
-                    return $price;
-                }, 99, 2);
-                
-                add_filter('woocommerce_product_get_regular_price', function($price, $product_obj) use ($product_id, $dealer_price) {
-                    if ($product_obj->get_id() == $product_id) {
-                        return $dealer_price;
-                    }
-                    return $price;
-                }, 99, 2);
-                
-                // Also hook into cart item price calculation
-                add_filter('woocommerce_add_cart_item_data', function($cart_item_data, $product_id, $variation_id) use ($dealer_price) {
-                    $cart_item_data['dealer_price'] = $dealer_price;
-                    return $cart_item_data;
-                }, 10, 3);
-            }
-        } else {
-            // Check for promotion pricing for regular users
-            $is_promotion = get_post_meta($product_id, '_is_promotion', true) === 'yes';
-            $promotion_price = get_post_meta($product_id, '_promotion_price', true);
-            $promotion_start_date = get_post_meta($product_id, '_promotion_start_date', true);
-            $promotion_end_date = get_post_meta($product_id, '_promotion_end_date', true);
-            
-            // Check if promotion is currently active
-            $promotion_active = false;
-            if ($is_promotion && $promotion_price) {
-                $current_date = current_time('Y-m-d');
-                $promotion_active = true;
-                
-                if ($promotion_start_date && $current_date < $promotion_start_date) {
-                    $promotion_active = false;
-                }
-                
-                if ($promotion_end_date && $current_date > $promotion_end_date) {
-                    $promotion_active = false;
-                }
-            }
-            
-            if ($promotion_active) {
-                // Store promotion pricing in session for this product
-                WC()->session->set('promotion_pricing_' . $product_id, $promotion_price);
-                
-                // Hook to modify product price for promotions
-                add_filter('woocommerce_product_get_price', function($price, $product_obj) use ($product_id, $promotion_price) {
-                    if ($product_obj->get_id() == $product_id) {
-                        return $promotion_price;
-                    }
-                    return $price;
-                }, 99, 2);
-                
-                add_filter('woocommerce_product_get_regular_price', function($price, $product_obj) use ($product_id, $promotion_price) {
-                    if ($product_obj->get_id() == $product_id) {
-                        return $promotion_price;
-                    }
-                    return $price;
-                }, 99, 2);
-                
-                // Also hook into cart item price calculation
-                add_filter('woocommerce_add_cart_item_data', function($cart_item_data, $product_id, $variation_id) use ($promotion_price) {
-                    $cart_item_data['promotion_price'] = $promotion_price;
-                    return $cart_item_data;
-                }, 10, 3);
-            }
-        }
-
-        error_log('Attempting to add to cart - Product: ' . $product_id . ', Quantity: ' . $quantity . ', Variation: ' . $variation_id);
-        error_log('Variation data: ' . print_r($variation_data, true));
+        // Add to custom cart
+        $cart_item_id = fitbody_add_cart_item($session_token, $product_id, $quantity, $variation_id, $variation_data, $user_id);
         
-        // Clear any existing notices before attempting to add to cart
-        wc_clear_notices();
-        
-        $cart_item_key = WC()->cart->add_to_cart($product_id, $quantity, $variation_id, $variation_data);
-        
-        // Log any WooCommerce notices that were generated
-        $notices = wc_get_notices();
-        if (!empty($notices)) {
-            error_log('WooCommerce notices after add_to_cart: ' . print_r($notices, true));
+        if (!$cart_item_id) {
+            return new WP_Error('add_failed', 'Failed to add item to cart', ['status' => 500]);
         }
-
-        if ($cart_item_key) {
-            error_log('Successfully added to cart with key: ' . $cart_item_key);
-            
-            // Save cart session
-            WC()->cart->set_session();
-            
-            // Also save to transient as backup
-            $cart_contents = WC()->cart->get_cart();
-            fitbody_save_cart_to_transient($cart_contents);
-            
-            // Return updated cart data with proper dealer pricing
-            $cart = WC()->cart;
-            $cart_items = [];
-            $subtotal = 0;
-            $total = 0;
-            
-            foreach ($cart->get_cart() as $cart_key => $cart_item) {
-                $item_product = $cart_item['data'];
-                // Get product image
-                $image_id = $item_product->get_image_id();
-                $image_url = $image_id ? wp_get_attachment_url($image_id) : '';
-                
-                // Use the actual price from the cart item (which should have dealer pricing applied)
-                $display_price = $item_product->get_price();
-                $line_total = $display_price * $cart_item['quantity'];
-                
-                $cart_items[] = [
-                    'key' => $cart_key,
-                    'id' => $cart_item['product_id'],
-                    'quantity' => $cart_item['quantity'],
-                    'name' => $item_product->get_name(),
-                    'price' => $display_price,
-                    'total' => $line_total,
-                    'image' => [
-                        'id' => $image_id,
-                        'src' => $image_url,
-                        'alt' => get_post_meta($image_id, '_wp_attachment_image_alt', true) ?: $item_product->get_name(),
-                    ]
-                ];
-                
-                $subtotal += $line_total;
-                $total += $line_total;
-            }
-
-            return rest_ensure_response([
-                'success' => true,
-                'cart_item_key' => $cart_item_key,
-                'message' => 'Product added to cart',
-                'items' => $cart_items,
-                'totals' => [
-                    'subtotal' => strval($subtotal),
-                    'total' => strval($total),
-                    'currency' => get_woocommerce_currency()
-                ]
-            ]);
-        } else {
-            error_log('Failed to add product to cart - WooCommerce add_to_cart returned false');
-            
-            // Get WooCommerce notices for more detailed error info
-            $notices = wc_get_notices('error');
-            $error_message = 'Failed to add product to cart';
-            
-            if (!empty($notices)) {
-                $error_message .= ': ' . implode(', ', array_column($notices, 'notice'));
-                wc_clear_notices(); // Clear notices after capturing them
-            }
-            
-            return new WP_Error('add_to_cart_failed', $error_message, ['status' => 500]);
-        }
+        
+        error_log('Successfully added to cart with ID: ' . $cart_item_id);
+        
+        // Return updated cart
+        $cart_data = fitbody_format_cart_response($session_token, $user_id);
+        $cart_data['success'] = true;
+        $cart_data['message'] = 'Product added to cart';
+        $cart_data['cart_item_key'] = (string)$cart_item_id;
+        
+        $response = rest_ensure_response($cart_data);
+        $response->header('X-Cart-Session', $session_token);
+        
+        return $response;
         
     } catch (Exception $e) {
         error_log('Add to cart exception: ' . $e->getMessage());
-        error_log('Stack trace: ' . $e->getTraceAsString());
-        return new WP_Error('add_to_cart_error', 'An error occurred while adding to cart: ' . $e->getMessage(), ['status' => 500]);
+        return new WP_Error('add_to_cart_error', 'An error occurred: ' . $e->getMessage(), ['status' => 500]);
     }
 }
 
 function fitbody_proxy_update_cart_item($request) {
-    if (!function_exists('WC')) {
-        return new WP_Error('woocommerce_not_active', 'WooCommerce is not active', ['status' => 500]);
-    }
-
-    $key = $request->get_param('key');
+    $cart_item_id = $request->get_param('key');
     $quantity = $request->get_param('quantity');
 
-    error_log("Cart update request - Key: {$key}, Quantity: {$quantity}");
+    error_log("Cart update request - Key: {$cart_item_id}, Quantity: {$quantity}");
 
-    if (!$key || !isset($quantity)) {
+    if (!$cart_item_id || !isset($quantity)) {
         error_log('Cart update failed: Missing parameters');
         return new WP_Error('missing_parameters', 'Key and quantity are required', ['status' => 400]);
     }
 
-    // Validate quantity is a positive integer
+    // Validate quantity is a non-negative integer
     $quantity = intval($quantity);
     if ($quantity < 0) {
         error_log('Cart update failed: Invalid quantity');
-        return new WP_Error('invalid_quantity', 'Quantity must be a positive integer', ['status' => 400]);
+        return new WP_Error('invalid_quantity', 'Quantity must be a non-negative integer', ['status' => 400]);
     }
 
-    // Initialize WooCommerce
-    fitbody_init_woocommerce_for_api();
-
-    // Check if user is dealer
-    $is_dealer = false;
+    $session_token = fitbody_get_session_token();
     $user = wp_get_current_user();
-    if ($user && $user->ID > 0) {
-        $is_dealer = get_user_meta($user->ID, 'is_dealer', true) === '1';
-        $dealer_status = get_user_meta($user->ID, 'dealer_status', true);
-        $is_dealer = $is_dealer && $dealer_status === 'approved';
-    }
+    $user_id = $user && $user->ID > 0 ? $user->ID : null;
+    
+    error_log('UPDATE CART - Session: ' . $session_token . ', Item ID: ' . $cart_item_id . ', Quantity: ' . $quantity);
 
     try {
-        $cart = WC()->cart;
-        if (!$cart) {
-            error_log('Cart update failed: Cart not initialized');
-            return new WP_Error('cart_not_initialized', 'Cart not initialized', ['status' => 500]);
-        }
+        // Update quantity (or remove if quantity is 0)
+        $success = fitbody_update_cart_item($cart_item_id, $quantity);
 
-        // Check if the cart item exists
-        $cart_contents = $cart->get_cart();
-        error_log('Available cart keys: ' . print_r(array_keys($cart_contents), true));
-        error_log('Looking for key: ' . $key);
-        
-        if (!isset($cart_contents[$key])) {
-            error_log("Cart update failed: Item with key {$key} not found in cart");
-            error_log('Available keys: ' . implode(', ', array_keys($cart_contents)));
-            return new WP_Error('item_not_found', 'Cart item not found', ['status' => 404]);
-        }
-
-        error_log('Cart contents before update: ' . print_r(array_keys($cart_contents), true));
-
-        // If quantity is 0, remove the item
-        if ($quantity === 0) {
-            $success = $cart->remove_cart_item($key);
-            $action = 'removed';
+        if ($success !== false) {
+            $cart_data = fitbody_format_cart_response($session_token, $user_id);
+            $cart_data['success'] = true;
+            $cart_data['message'] = $quantity === 0 ? 'Cart item removed' : 'Cart item updated';
+            
+            $response = rest_ensure_response($cart_data);
+            $response->header('X-Cart-Session', $session_token);
+            
+            return $response;
         } else {
-            $success = $cart->set_quantity($key, $quantity);
-            $action = 'updated';
-        }
-
-        if ($success) {
-            error_log("Cart item {$action} successfully");
-            
-            // Save cart session
-            WC()->cart->set_session();
-            
-            // Also save to transient as backup
-            $cart_contents = WC()->cart->get_cart();
-            fitbody_save_cart_to_transient($cart_contents);
-            
-            // Return updated cart data
-            $cart_items = [];
-            foreach ($cart->get_cart() as $cart_key => $cart_item) {
-                $item_product = $cart_item['data'];
-                if ($item_product && $item_product->exists()) {
-                    // Get product image
-                    $image_id = $item_product->get_image_id();
-                    $image_url = $image_id ? wp_get_attachment_url($image_id) : '';
-                    
-                    // Use dealer price if applicable
-                    $display_price = $item_product->get_price();
-                    $line_total = $cart_item['line_total'];
-                    
-                    if ($is_dealer) {
-                        $dealer_price = get_post_meta($cart_item['product_id'], '_dealer_price', true);
-                        if ($dealer_price) {
-                            $display_price = $dealer_price;
-                            $line_total = $dealer_price * $cart_item['quantity'];
-                        }
-                    }
-                    
-                    $cart_items[] = [
-                        'key' => $cart_key,
-                        'id' => $cart_item['product_id'],
-                        'quantity' => $cart_item['quantity'],
-                        'name' => $item_product->get_name(),
-                        'price' => $display_price,
-                        'total' => $line_total,
-                        'image' => [
-                            'id' => $image_id,
-                            'src' => $image_url,
-                            'alt' => get_post_meta($image_id, '_wp_attachment_image_alt', true) ?: $item_product->get_name(),
-                        ]
-                    ];
-                }
-            }
-
-            // Calculate totals with dealer pricing
-            $subtotal = 0;
-            $total = 0;
-            foreach ($cart_items as $item) {
-                $subtotal += floatval($item['total']);
-                $total += floatval($item['total']);
-            }
-
-            $response_data = [
-                'success' => true,
-                'message' => "Cart item {$action}",
-                'items' => $cart_items,
-                'totals' => [
-                    'subtotal' => strval($subtotal),
-                    'total' => strval($total),
-                    'currency' => get_woocommerce_currency()
-                ]
-            ];
-
-            error_log('Cart update response: ' . print_r($response_data, true));
-            return rest_ensure_response($response_data);
-        } else {
-            error_log("Cart update failed: set_quantity/remove_cart_item returned false");
-            return new WP_Error('update_failed', "Failed to {$action} cart item", ['status' => 500]);
+            error_log("Cart update failed for item {$cart_item_id}");
+            return new WP_Error('update_failed', 'Failed to update cart item', ['status' => 500]);
         }
     } catch (Exception $e) {
         error_log('Cart update exception: ' . $e->getMessage());
-        error_log('Stack trace: ' . $e->getTraceAsString());
         return new WP_Error('update_error', $e->getMessage(), ['status' => 500]);
     }
 }
 
 function fitbody_proxy_remove_cart_item($request) {
-    if (!function_exists('WC')) {
-        return new WP_Error('woocommerce_not_active', 'WooCommerce is not active', ['status' => 500]);
-    }
+    $cart_item_id = $request->get_param('key');
 
-    $key = $request->get_param('key');
-
-    if (!$key) {
+    if (!$cart_item_id) {
         return new WP_Error('missing_key', 'Cart item key is required', ['status' => 400]);
     }
 
-    // Initialize WooCommerce
-    fitbody_init_woocommerce_for_api();
-
-    // Check if user is dealer
-    $is_dealer = false;
+    $session_token = fitbody_get_session_token();
     $user = wp_get_current_user();
-    if ($user && $user->ID > 0) {
-        $is_dealer = get_user_meta($user->ID, 'is_dealer', true) === '1';
-        $dealer_status = get_user_meta($user->ID, 'dealer_status', true);
-        $is_dealer = $is_dealer && $dealer_status === 'approved';
-    }
+    $user_id = $user && $user->ID > 0 ? $user->ID : null;
+    
+    error_log('REMOVE FROM CART - Session: ' . $session_token . ', Item ID: ' . $cart_item_id);
 
-    $success = WC()->cart->remove_cart_item($key);
+    $success = fitbody_remove_cart_item($cart_item_id);
 
     if ($success) {
-        // Save cart session
-        WC()->cart->set_session();
+        $cart_data = fitbody_format_cart_response($session_token, $user_id);
+        $cart_data['success'] = true;
+        $cart_data['message'] = 'Cart item removed';
         
-        // Also save to transient as backup
-        $cart_contents = WC()->cart->get_cart();
-        fitbody_save_cart_to_transient($cart_contents);
+        $response = rest_ensure_response($cart_data);
+        $response->header('X-Cart-Session', $session_token);
         
-        // Return updated cart data
-        $cart = WC()->cart;
-        $cart_items = [];
-        foreach ($cart->get_cart() as $cart_key => $cart_item) {
-            $item_product = $cart_item['data'];
-            // Get product image
-            $image_id = $item_product->get_image_id();
-            $image_url = $image_id ? wp_get_attachment_url($image_id) : '';
-            
-            // Use dealer price if applicable
-            $display_price = $item_product->get_price();
-            $line_total = $cart_item['line_total'];
-            
-            if ($is_dealer) {
-                $dealer_price = get_post_meta($cart_item['product_id'], '_dealer_price', true);
-                if ($dealer_price) {
-                    $display_price = $dealer_price;
-                    $line_total = $dealer_price * $cart_item['quantity'];
-                }
-            }
-            
-            $cart_items[] = [
-                'key' => $cart_key,
-                'id' => $cart_item['product_id'],
-                'quantity' => $cart_item['quantity'],
-                'name' => $item_product->get_name(),
-                'price' => $display_price,
-                'total' => $line_total,
-                'image' => [
-                    'id' => $image_id,
-                    'src' => $image_url,
-                    'alt' => get_post_meta($image_id, '_wp_attachment_image_alt', true) ?: $item_product->get_name(),
-                ]
-            ];
-        }
-
-        // Calculate totals with dealer pricing
-        $subtotal = 0;
-        $total = 0;
-        foreach ($cart_items as $item) {
-            $subtotal += floatval($item['total']);
-            $total += floatval($item['total']);
-        }
-
-        return rest_ensure_response([
-            'success' => true,
-            'message' => 'Cart item removed',
-            'items' => $cart_items,
-            'totals' => [
-                'subtotal' => strval($subtotal),
-                'total' => strval($total),
-                'currency' => get_woocommerce_currency()
-            ]
-        ]);
+        return $response;
     } else {
         return new WP_Error('remove_failed', 'Failed to remove cart item', ['status' => 500]);
     }

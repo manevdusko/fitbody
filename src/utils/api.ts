@@ -52,7 +52,18 @@ const createApiInstance = (baseURL: string): AxiosInstance => {
       }
       
       // Add cart session token for cart-related requests
-      const cartSession = Cookies.get('cart_session');
+      let cartSession = Cookies.get('cart_session');
+      
+      // Generate session token if none exists (first time user)
+      if (!cartSession && typeof window !== 'undefined') {
+        cartSession = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        Cookies.set('cart_session', cartSession, {
+          expires: 7,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'lax',
+        });
+      }
+      
       if (cartSession) {
         config.headers['X-Cart-Session'] = cartSession;
       }
@@ -68,6 +79,7 @@ const createApiInstance = (baseURL: string): AxiosInstance => {
       // Store cart session token from response header
       const cartSession = response.headers['x-cart-session'];
       if (cartSession) {
+        console.log('[Cart Session] Received from server:', cartSession);
         Cookies.set('cart_session', cartSession, {
           expires: 7, // 7 days
           secure: process.env.NODE_ENV === 'production',
