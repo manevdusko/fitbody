@@ -5,6 +5,7 @@ import { FiPhone, FiMail, FiMapPin, FiInstagram, FiFacebook, FiClock, FiSend, Fi
 import { ContactSEO } from '@/components/SEO/SEOHead';
 import { LocalBusinessSchema, BreadcrumbSchema } from '@/components/SEO/StructuredData';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { contactApi } from '@/utils/api';
 
 interface ContactFormData {
   name: string;
@@ -38,9 +39,16 @@ const ContactPage: React.FC = () => {
     e.preventDefault();
     setIsSubmitting(true);
     
-    // Simulate form submission
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Submit to WordPress API
+      await contactApi.submit({
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        subject: formData.subject,
+        message: formData.message,
+      });
+      
       setSubmitStatus('success');
       setFormData({
         name: '',
@@ -50,6 +58,7 @@ const ContactPage: React.FC = () => {
         message: '',
       });
     } catch (error) {
+      console.error('Failed to send message:', error);
       setSubmitStatus('error');
     } finally {
       setIsSubmitting(false);

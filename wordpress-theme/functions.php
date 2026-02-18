@@ -608,6 +608,13 @@ function fitbody_register_woocommerce_proxy() {
         'callback' => 'fitbody_get_featured_products',
         'permission_callback' => '__return_true',
     ]);
+    
+    // Contact form endpoint
+    register_rest_route('fitbody/v1', '/contact', [
+        'methods'  => 'POST',
+        'callback' => 'fitbody_handle_contact_form',
+        'permission_callback' => '__return_true',
+    ]);
 }
 add_action('rest_api_init', 'fitbody_register_woocommerce_proxy');
 
@@ -6007,3 +6014,110 @@ function fitbody_save_category_multilang_fields($term_id) {
 }
 add_action('edited_category', 'fitbody_save_category_multilang_fields');
 add_action('created_category', 'fitbody_save_category_multilang_fields');
+
+
+/**
+ * Handle contact form submission
+ * Sends notification to Telegram and email
+ */
+function fitbody_handle_contact_form($request) {
+    // Get form data
+    $name = sanitize_text_field($request->get_param('name'));
+    $email = sanitize_email($request->get_param('email'));
+    $phone = sanitize_text_field($request->get_param('phone'));
+    $subject = sanitize_text_field($request->get_param('subject'));
+    $message = sanitize_textarea_field($request->get_param('message'));
+    
+    // Validate required fields
+    if (empty($name) || empty($email) || empty($message)) {
+        return new WP_Error('missing_fields', 'Name, email, and message are required', ['status' => 400]);
+    }
+    
+    // Validate email
+    if (!is_email($email)) {
+        return new WP_Error('invalid_email', 'Invalid email address', ['status' => 400]);
+    }
+    
+    // Prepare message for Telegram
+    $telegram_message = "🔔 *Нова порака од контакт форма*\n\n";
+    $telegram_message .= "👤 *Име:* " . $name . "\n";
+    $telegram_message .= "📧 *Email:* " . $email . "\n";
+    
+    if (!empty($phone)) {
+        $telegram_message .= "📱 *Телефон:* " . $phone . "\n";
+    }
+    
+    if (!empty($subject)) {
+        $telegram_message .= "📋 *Тема:* " . $subject . "\n";
+    }
+    
+    $telegram_message .= "\n💬 *Порака:*\n" . $message;
+    
+    // Send to Telegram
+    $telegram_sent = fitbody_send_telegram_message($telegram_message);
+    
+    // Send email notification
+    $to = get_option('admin_email', 'fitbody.mk@icloud.com');
+    $email_subject = 'Нова порака од контакт форма - ' . ($subject ?: 'Општо прашање');
+    $email_message = "Име: {$name}\n";
+    $email_message .= "Email: {$email}\n";
+    $email_message .= "Телефон: {$phone}\n";
+    $email_message .= "Тема: {$subject}\n\n";
+    $email_message .= "Порака:\n{$message}\n";
+    
+    $headers = ['Content-Type: text/plain; charset=UTF-8'];
+    $email_sent = wp_mail($to, $email_subject, $email_message, $headers);
+    
+    // Log submission
+    error_log('Contact form submission: ' . $name . ' (' . $email . ')');
+    
+    return rest_ensure_response([
+        'success' => true,
+        'message' => 'Вашата порака е успешно испратена',
+        'telegram_sent' => $telegram_sent,
+        'email_sent' => $email_sent,
+    ]);
+}
+
+/**
+ * Send message to Telegram
+ */
+function fitbody_send_telegram_message($message) {
+    // Telegram Bot configuration
+    // You need to set these in wp-config.php or as WordPress options
+    $bot_token = defined('TELEGRAM_BOT_TOKEN') ? TELEGRAM_BOT_TOKEN : get_option('telegram_bot_token');
+    $chat_id = defined('TELEGRAM_CHAT_ID') ? TELEGRAM_CHAT_ID : get_option('telegram_chat_id');
+    
+    if (empty($bot_token) || empty($chat_id)) {
+        error_log('Telegram credentials not configured');
+        return false;
+    }
+    
+    $url = "https://api.telegram.org/bot{$bot_token}/sendMessage";
+    
+    $data = [
+        'chat_id' => $chat_id,
+        'text' => $message,
+        'parse_mode' => 'Markdown',
+    ];
+    
+    $response = wp_remote_post($url, [
+        'body' => $data,
+        'timeout' => 10,
+    ]);
+    
+    if (is_wp_error($response)) {
+        error_log('Telegram API error: ' . $response->get_error_message());
+        return false;
+    }
+    
+    $body = json_decode(wp_remote_retrieve_body($response), true);
+    
+    if (isset($body['ok']) && $body['ok'] === true) {
+        error_log('Telegram message sent successfully');
+        return true;
+    } else {
+        error_log('Telegram API returned error: ' . print_r($body, true));
+        return false;
+    }
+}
