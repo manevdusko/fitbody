@@ -363,8 +363,9 @@ function fitbody_add_cors_headers() {
     }
     
     header('Access-Control-Allow-Methods: GET, POST, OPTIONS, PUT, DELETE');
-    header('Access-Control-Allow-Headers: Authorization, Content-Type, X-Requested-With');
+    header('Access-Control-Allow-Headers: Authorization, Content-Type, X-Requested-With, X-Cart-Session');
     header('Access-Control-Allow-Credentials: true');
+    header('Access-Control-Expose-Headers: X-Cart-Session');
     
     // Handle preflight requests
     if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -384,7 +385,8 @@ function fitbody_jwt_auth_cors() {
     if (!headers_sent()) {
         header('Access-Control-Allow-Origin: *');
         header('Access-Control-Allow-Methods: GET, POST, OPTIONS, PUT, DELETE');
-        header('Access-Control-Allow-Headers: Authorization, Content-Type, X-Requested-With');
+        header('Access-Control-Allow-Headers: Authorization, Content-Type, X-Requested-With, X-Cart-Session');
+        header('Access-Control-Expose-Headers: X-Cart-Session');
     }
     
     if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {

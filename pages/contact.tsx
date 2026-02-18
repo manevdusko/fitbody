@@ -89,7 +89,7 @@ const ContactPage: React.FC = () => {
     {
       icon: FiClock,
       title: t('pages.contact.workingHours'),
-      value: t('pages.contact.workingHoursValue'),
+      value: `${t('pages.contact.workingHoursValue')} | ${t('pages.contact.workingHoursSaturday')}`,
       href: null,
       description: t('pages.contact.workingHoursDescription')
     }
