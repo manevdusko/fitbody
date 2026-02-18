@@ -122,7 +122,7 @@ add_action('template_redirect', function() {
         return;
     }
     
-    // Redirect everything else to staging.fitbody.mk
+    // Redirect everything else to fitbody.mk
     $redirect_url = 'https://fitbody.mk' . $request_uri;
     wp_redirect($redirect_url, 301);
     exit;
