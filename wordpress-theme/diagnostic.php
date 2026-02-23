@@ -105,14 +105,10 @@ function fitbody_render_diagnostic_page() {
                 <?php
                 $theme_dir = get_template_directory();
                 $required_files = [
-                    'index.html' => 'Next.js Static Export',
-                    'index.php' => 'WordPress Template',
                     'functions.php' => 'Theme Functions',
                     '404.php' => '404 Handler',
                     '.htaccess' => 'Apache Config',
-                    '_next/static' => 'Next.js Static Assets',
-                    'images' => 'Images Directory',
-                    'assets' => 'Assets Directory',
+                    'diagnostic.php' => 'Diagnostic Tool',
                 ];
                 
                 foreach ($required_files as $file => $description) {
@@ -124,6 +120,27 @@ function fitbody_render_diagnostic_page() {
                     echo '</tr>';
                 }
                 ?>
+            </table>
+            <p class="description">
+                ℹ️ <strong>Note:</strong> Static Next.js files are hosted separately on fitbody.mk, not in the WordPress theme.
+            </p>
+        </div>
+
+        <div class="card">
+            <h2>Architecture</h2>
+            <table class="widefat">
+                <tr>
+                    <td><strong>Frontend (UI):</strong></td>
+                    <td>https://fitbody.mk (Next.js static site - hosted separately)</td>
+                </tr>
+                <tr>
+                    <td><strong>Backend (API):</strong></td>
+                    <td>https://api.fitbody.mk (WordPress + WooCommerce)</td>
+                </tr>
+                <tr>
+                    <td><strong>Admin Panel:</strong></td>
+                    <td>https://api.fitbody.mk/wp-admin/</td>
+                </tr>
             </table>
         </div>
 
@@ -173,50 +190,6 @@ function fitbody_render_diagnostic_page() {
         </div>
 
         <div class="card">
-            <h2>Static Files Test</h2>
-            <table class="widefat">
-                <?php
-                $theme_url = get_template_directory_uri();
-                $static_files = [
-                    '/images/hero.mp4' => 'Hero Video',
-                    '/assets/logo.png' => 'Logo',
-                    '/favicon.ico' => 'Favicon',
-                    '/_next/static/css' => 'Next.js CSS Directory',
-                    '/_next/static/chunks' => 'Next.js JS Chunks',
-                ];
-                
-                foreach ($static_files as $file => $description) {
-                    $url = $theme_url . $file;
-                    $response = wp_remote_head($url, ['timeout' => 5]);
-                    $status_code = wp_remote_retrieve_response_code($response);
-                    
-                    echo '<tr>';
-                    echo '<td><strong>' . esc_html($description) . ':</strong></td>';
-                    echo '<td>';
-                    
-                    if (is_wp_error($response)) {
-                        echo '❌ Error: ' . esc_html($response->get_error_message());
-                    } else {
-                        if ($status_code === 200) {
-                            echo '✅ Accessible (200)';
-                        } elseif ($status_code === 404) {
-                            echo '❌ Not Found (404)';
-                        } elseif ($status_code === 503) {
-                            echo '❌ Service Unavailable (503) - Server trying to execute as PHP';
-                        } else {
-                            echo '⚠️ Status: ' . esc_html($status_code);
-                        }
-                    }
-                    
-                    echo ' <a href="' . esc_url($url) . '" target="_blank">Test</a>';
-                    echo '</td>';
-                    echo '</tr>';
-                }
-                ?>
-            </table>
-        </div>
-
-        <div class="card">
             <h2>Quick Actions</h2>
             <p>
                 <a href="<?php echo admin_url('options-permalink.php'); ?>" class="button button-primary">
@@ -235,9 +208,9 @@ function fitbody_render_diagnostic_page() {
             <h2>Recommendations</h2>
             <ul>
                 <li><strong>If API endpoints return 404:</strong> Go to Settings → Permalinks and click "Save Changes" to flush rewrite rules.</li>
-                <li><strong>If static files return 503:</strong> Contact your hosting provider - the server is trying to execute .js files as PHP instead of serving them as static files.</li>
                 <li><strong>If .htaccess is not writable:</strong> Set file permissions to 644 or contact your hosting provider.</li>
                 <li><strong>If rewrite rules are not configured:</strong> Flush permalinks or check if mod_rewrite is enabled on your server.</li>
+                <li><strong>Architecture:</strong> Frontend (fitbody.mk) and Backend (api.fitbody.mk) are separate. WordPress only serves API endpoints and admin panel.</li>
             </ul>
         </div>
     </div>

@@ -27,57 +27,41 @@ add_action('after_setup_theme', function() {
     }
 });
 
-// Handle 404 errors more gracefully to prevent theme loading issues
-add_action('template_redirect', function() {
-    if (is_404()) {
-        $request_uri = $_SERVER['REQUEST_URI'] ?? '';
-        $path = parse_url($request_uri, PHP_URL_PATH);
-        $path = rtrim($path, '/');
-        
-        // Check if this might be a Next.js route
-        $nextjs_routes = ['/products', '/dealer', '/cart', '/checkout', '/about', '/contact', '/blog'];
-        
-        foreach ($nextjs_routes as $route) {
-            if ($path === $route || strpos($path, $route . '/') === 0) {
-                // This looks like a Next.js route, serve the app
-                $index_file = get_template_directory() . '/index.html';
-                if (file_exists($index_file)) {
-                    status_header(200);
-                    header('Content-Type: text/html; charset=UTF-8');
-                    $content = file_get_contents($index_file);
-                    
-                    $current_path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-                    $wordpress_vars = sprintf(
-                        '<script>
-                            window.WORDPRESS_API_URL = "%s";
-                            window.WOOCOMMERCE_API_URL = "%s";
-                            window.THEME_URL = "%s";
-                            window.INITIAL_PATH = "%s";
-                        </script>',
-                        esc_js(home_url('/wp-json/wp/v2')),
-                        esc_js(home_url('/wp-json/fitbody/v1')),
-                        esc_js(get_template_directory_uri()),
-                        esc_js($current_path)
-                    );
-                    
-                    $content = str_replace('</head>', $wordpress_vars . '</head>', $content);
-                    
-                    // Fix asset paths to point to theme directory
-                    $theme_url = get_template_directory_uri();
-                    $content = preg_replace('/(href|src)=(["\'])\//', '$1=$2' . $theme_url . '/', $content);
-                    $content = str_replace('"/images/', '"' . $theme_url . '/images/', $content);
-                    $content = str_replace('"/assets/', '"' . $theme_url . '/assets/', $content);
-                    
-                    echo $content;
-                    exit;
-                }
-            }
-        }
-    }
-});
-
 // Load diagnostic page
 require_once get_template_directory() . '/diagnostic.php';
+
+/**
+ * Prevent WordPress from overwriting custom .htaccess rules
+ * This ensures our CORS and custom configurations persist
+ */
+add_filter('flush_rewrite_rules_hard', function($hard) {
+    // Return false to prevent .htaccess from being overwritten
+    // Rewrite rules will still be flushed in the database
+    return false;
+});
+
+/**
+ * Preserve custom .htaccess content when WordPress tries to update it
+ */
+add_filter('mod_rewrite_rules', function($rules) {
+    // Add our custom CORS headers before WordPress rules
+    $custom_rules = "# CORS Headers for API requests\n";
+    $custom_rules .= "<IfModule mod_headers.c>\n";
+    $custom_rules .= "    Header always set Access-Control-Allow-Origin \"*\"\n";
+    $custom_rules .= "    Header always set Access-Control-Allow-Methods \"GET, POST, PUT, DELETE, OPTIONS\"\n";
+    $custom_rules .= "    Header always set Access-Control-Allow-Headers \"Authorization, Content-Type, X-Requested-With, X-Cart-Session\"\n";
+    $custom_rules .= "    Header always set Access-Control-Expose-Headers \"X-Cart-Session, X-WP-Total, X-WP-TotalPages\"\n";
+    $custom_rules .= "    Header always set Access-Control-Allow-Credentials \"true\"\n";
+    $custom_rules .= "</IfModule>\n\n";
+    
+    $custom_rules .= "# Handle preflight OPTIONS requests\n";
+    $custom_rules .= "<IfModule mod_rewrite.c>\n";
+    $custom_rules .= "    RewriteCond %{REQUEST_METHOD} OPTIONS\n";
+    $custom_rules .= "    RewriteRule ^(.*)$ $1 [R=200,L]\n";
+    $custom_rules .= "</IfModule>\n\n";
+    
+    return $custom_rules . $rules;
+});
 
 /**
  * Theme setup with SEO support
@@ -280,7 +264,7 @@ add_action('wp_head', 'fitbody_add_local_business_schema', 6);
 
 /**
  * Minimal frontend assets.
- * Next.js CSS/JS come from index.html + /_next; do not enqueue them here.
+ * WordPress only serves API endpoints - no frontend assets needed.
  */
 function fitbody_enqueue_assets() {
     if (is_admin()) {
@@ -298,80 +282,6 @@ function fitbody_enqueue_assets() {
     }
 }
 add_action('wp_enqueue_scripts', 'fitbody_enqueue_assets');
-
-/**
- * Handle Next.js routing for product pages and other app routes
- */
-function fitbody_handle_nextjs_routing() {
-    // Get the current request
-    $request_uri = $_SERVER['REQUEST_URI'];
-    $parsed_url = parse_url($request_uri);
-    $path = $parsed_url['path'];
-    
-    // Remove trailing slash
-    $path = rtrim($path, '/');
-    
-    // Define Next.js routes
-    $nextjs_routes = [
-        '/products',
-        '/dealer',
-        '/cart',
-        '/checkout',
-        '/about',
-        '/contact',
-        '/blog'
-    ];
-    
-    // Check if this is a Next.js route
-    $is_nextjs_route = false;
-    foreach ($nextjs_routes as $route) {
-        if ($path === $route || strpos($path, $route . '/') === 0) {
-            $is_nextjs_route = true;
-            break;
-        }
-    }
-    
-    // If it's a Next.js route, serve the static app
-    if ($is_nextjs_route) {
-        $index_file = get_template_directory() . '/index.html';
-        
-        if (file_exists($index_file)) {
-            // Set proper headers
-            header('Content-Type: text/html; charset=UTF-8');
-            
-            // Read and serve the Next.js index.html
-            $content = file_get_contents($index_file);
-            
-            // Inject WordPress variables for API URLs and current path
-            $current_path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-            $wordpress_vars = sprintf(
-                '<script>
-                    window.WORDPRESS_API_URL = "%s";
-                    window.WOOCOMMERCE_API_URL = "%s";
-                    window.THEME_URL = "%s";
-                    window.INITIAL_PATH = "%s";
-                </script>',
-                esc_js(home_url('/wp-json/wp/v2')),
-                esc_js(home_url('/wp-json/fitbody/v1')),
-                esc_js(get_template_directory_uri()),
-                esc_js($current_path)
-            );
-            
-            // Insert variables before closing head tag
-            $content = str_replace('</head>', $wordpress_vars . '</head>', $content);
-            
-            // Fix asset paths to point to theme directory
-            $theme_url = get_template_directory_uri();
-            $content = preg_replace('/(href|src)=(["\'])\//', '$1=$2' . $theme_url . '/', $content);
-            $content = str_replace('"/images/', '"' . $theme_url . '/images/', $content);
-            $content = str_replace('"/assets/', '"' . $theme_url . '/assets/', $content);
-            
-            echo $content;
-            exit;
-        }
-    }
-}
-add_action('template_redirect', 'fitbody_handle_nextjs_routing', 1);
 
 /**
  * CORS Headers for API requests

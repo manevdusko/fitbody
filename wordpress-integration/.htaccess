@@ -1,5 +1,7 @@
 # BEGIN WordPress
-# Насоките (линиите) помеѓу `BEGIN WordPress` и `END WordPress` се генерирани динамички и треба да се менуваат само преку WordPress филтри. Било кои промени врз овие директиви ќе бидат пребришани.
+# IMPORTANT: Do not modify the WordPress rewrite rules below
+# These are managed by WordPress and will be regenerated automatically
+# Custom rules should be added OUTSIDE this block
 <IfModule mod_rewrite.c>
 RewriteEngine On
 RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
