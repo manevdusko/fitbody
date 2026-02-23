@@ -3,7 +3,7 @@
  * Template Name: FitBody Diagnostic Page
  * 
  * This page helps diagnose issues with the FitBody.mk setup
- * Access it at: https://fitbody.mk/wp-admin/admin.php?page=fitbody-diagnostic
+ * Access it at: https://api.fitbody.mk/wp-admin/admin.php?page=fitbody-diagnostic
  */
 
 // Prevent direct access

@@ -71,7 +71,10 @@ const BlogPage = () => {
       setLoading(true);
       const currentPage = reset ? 1 : page;
       
-      let url = `${getApiUrl()}/wp-json/fitbody/v1/blog/posts?per_page=${postsPerPage}&page=${currentPage}`;
+      const apiUrl = getApiUrl();
+      console.log('Fetching blog posts from:', apiUrl);
+      
+      let url = `${apiUrl}/wp-json/fitbody/v1/blog/posts?per_page=${postsPerPage}&page=${currentPage}`;
       
       // Add language parameter for multilingual support
       if (currentLanguage && currentLanguage !== 'mk') {
@@ -86,13 +89,18 @@ const BlogPage = () => {
         url += `&categories=${selectedCategory}`;
       }
 
+      console.log('Full blog posts URL:', url);
       const response = await fetch(url);
       
+      console.log('Blog posts response status:', response.status);
+      
       if (!response.ok) {
+        console.error('Blog posts fetch failed:', response.status, response.statusText);
         throw new Error('Failed to fetch posts');
       }
 
       const newPosts = await response.json();
+      console.log('Blog posts received:', newPosts.length, 'posts');
       
       if (reset) {
         setPosts(newPosts);
@@ -104,6 +112,7 @@ const BlogPage = () => {
       
       setHasMore(newPosts.length === postsPerPage);
     } catch (err) {
+      console.error('Blog posts error:', err);
       setError(err instanceof Error ? err.message : 'Failed to load posts');
     } finally {
       setLoading(false);
@@ -134,9 +143,11 @@ const BlogPage = () => {
 
   const getApiUrl = () => {
     if (typeof window !== 'undefined') {
-      return (window as any).WORDPRESS_API_URL?.replace('/wp-json/wp/v2', '') || 'https://fitbody.mk';
+      const apiUrl = (window as any).WORDPRESS_API_URL?.replace('/wp-json/wp/v2', '') || 'https://api.fitbody.mk';
+      console.log('Blog API URL:', apiUrl);
+      return apiUrl;
     }
-    return 'https://fitbody.mk';
+    return 'https://api.fitbody.mk';
   };
 
   const formatDate = (dateString: string) => {

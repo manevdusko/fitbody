@@ -401,7 +401,8 @@ function fitbody_add_cors_headers() {
     header('Access-Control-Allow-Methods: GET, POST, OPTIONS, PUT, DELETE');
     header('Access-Control-Allow-Headers: Authorization, Content-Type, X-Requested-With, X-Cart-Session');
     header('Access-Control-Allow-Credentials: true');
-    header('Access-Control-Expose-Headers: X-Cart-Session');
+    // IMPORTANT: Expose pagination headers so JavaScript can read them
+    header('Access-Control-Expose-Headers: X-Cart-Session, X-WP-Total, X-WP-TotalPages');
     
     // Handle preflight requests
     if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -4165,7 +4166,7 @@ function fitbody_format_telegram_order_message($order) {
         $message .= $order->get_customer_note() . "\n\n";
     }
     
-    $message .= "🌐 Администрација: https://fitbody.mk/wp-admin/post.php?post=" . $order->get_id() . "&action=edit";
+    $message .= "🌐 Администрација: https://api.fitbody.mk/wp-admin/post.php?post=" . $order->get_id() . "&action=edit";
     
     return $message;
 }
@@ -5115,8 +5116,17 @@ add_action('manage_product_posts_custom_column', 'fitbody_show_language_column_c
 
 /**
  * Register multilingual blog endpoints
+ * IMPORTANT: This must run early to ensure endpoints are available
  */
 function fitbody_register_blog_multilang_endpoints() {
+    // Ensure we're in the right context
+    if (!function_exists('register_rest_route')) {
+        error_log('Blog endpoints: register_rest_route not available');
+        return;
+    }
+    
+    error_log('Registering blog endpoints...');
+    
     // Blog posts endpoint with language support
     register_rest_route('fitbody/v1', '/blog/posts', [
         [
@@ -5227,17 +5237,46 @@ function fitbody_register_blog_multilang_endpoints() {
         ],
     ]);
 }
-add_action('rest_api_init', 'fitbody_register_blog_multilang_endpoints', 25);
+add_action('rest_api_init', 'fitbody_register_blog_multilang_endpoints', 10);
+
+/**
+ * Ensure blog endpoints are registered and permalinks are flushed if needed
+ * This runs on theme activation and periodically checks if endpoints are working
+ */
+function fitbody_ensure_blog_endpoints() {
+    // Check if we need to flush permalinks
+    $endpoints_flushed = get_option('fitbody_blog_endpoints_flushed', false);
+    
+    if (!$endpoints_flushed) {
+        error_log('Flushing permalinks to register blog endpoints...');
+        flush_rewrite_rules();
+        update_option('fitbody_blog_endpoints_flushed', true);
+    }
+}
+add_action('after_switch_theme', 'fitbody_ensure_blog_endpoints');
+add_action('admin_init', 'fitbody_ensure_blog_endpoints');
+
+/**
+ * Reset the flush flag when needed (e.g., after theme update)
+ */
+function fitbody_reset_endpoints_flag() {
+    delete_option('fitbody_blog_endpoints_flushed');
+}
+register_activation_hook(__FILE__, 'fitbody_reset_endpoints_flag');
 
 /**
  * Get blog posts with multilingual support
  */
 function fitbody_get_blog_posts_multilang($request) {
+    error_log('Blog posts endpoint called');
+    
     $lang = $request->get_param('lang') ?: 'mk';
     $per_page = $request->get_param('per_page') ?: 10;
     $page = $request->get_param('page') ?: 1;
     $search = $request->get_param('search');
     $categories = $request->get_param('categories');
+    
+    error_log('Blog posts params: lang=' . $lang . ', per_page=' . $per_page . ', page=' . $page . ', search=' . $search . ', categories=' . $categories);
 
     $args = [
         'post_type' => 'post',

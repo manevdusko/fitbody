@@ -85,9 +85,9 @@ const DealerBlogPage = () => {
 
   const getApiUrl = () => {
     if (typeof window !== 'undefined') {
-      return (window as any).WORDPRESS_API_URL?.replace('/wp-json/wp/v2', '') || 'https://fitbody.mk';
+      return (window as any).WORDPRESS_API_URL?.replace('/wp-json/wp/v2', '') || 'https://api.fitbody.mk';
     }
-    return 'https://fitbody.mk';
+    return 'https://api.fitbody.mk';
   };
 
   if (!user || !user.is_dealer) {

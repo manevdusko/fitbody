@@ -136,6 +136,16 @@ const extractPaginationMeta = (
   const total = parseInt(headers['x-wp-total'] || headers['X-WP-Total'] || '0', 10);
   const totalPages = parseInt(headers['x-wp-totalpages'] || headers['X-WP-TotalPages'] || '0', 10);
 
+  console.log('Extracting pagination meta from headers:', {
+    'x-wp-total': headers['x-wp-total'],
+    'X-WP-Total': headers['X-WP-Total'],
+    'x-wp-totalpages': headers['x-wp-totalpages'],
+    'X-WP-TotalPages': headers['X-WP-TotalPages'],
+    total,
+    totalPages,
+    allHeaders: Object.keys(headers)
+  });
+
   return {
     total,
     total_pages: totalPages,
@@ -178,13 +188,36 @@ export const productsApi = {
   getAll: async (params?: ProductsQueryParams): Promise<{ products: Product[]; meta: PaginationMeta }> => {
     try {
       const response = await wcApi.get<Product[]>('/products', { params });
+      
+      console.log('Products API response headers:', response.headers);
+      console.log('Products count:', response.data.length);
+      
       const meta = extractPaginationMeta(response.headers, params?.page, params?.per_page);
+      
+      // FALLBACK: If headers are not exposed (CORS issue), make educated guess
+      if (meta.total === 0 && response.data.length > 0) {
+        console.warn('Pagination headers not available (CORS issue). Using fallback logic.');
+        const perPage = params?.per_page || 12;
+        const currentPage = params?.page || 1;
+        
+        // If we got a full page, assume there might be more
+        const hasMore = response.data.length === perPage;
+        
+        meta.total = hasMore ? (currentPage * perPage) + 1 : (currentPage - 1) * perPage + response.data.length;
+        meta.total_pages = hasMore ? currentPage + 1 : currentPage;
+        meta.has_next = hasMore;
+        
+        console.log('Fallback meta calculated:', meta);
+      }
+      
+      console.log('Final extracted meta:', meta);
 
       return {
         products: response.data,
         meta,
       };
     } catch (error) {
+      console.error('Products API error:', error);
       return handleApiError(error, 'Failed to fetch products');
     }
   },

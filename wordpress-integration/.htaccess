@@ -5,6 +5,11 @@ RewriteEngine On
 RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 RewriteBase /
 RewriteRule ^index\.php$ - [L]
+
+# Ensure REST API requests are handled properly
+RewriteCond %{REQUEST_URI} ^/wp-json/
+RewriteRule ^(.*)$ index.php [L]
+
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule . /index.php [L]
@@ -16,7 +21,7 @@ RewriteRule . /index.php [L]
     Header always set Access-Control-Allow-Origin "*"
     Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
     Header always set Access-Control-Allow-Headers "Authorization, Content-Type, X-Requested-With, X-Cart-Session"
-    Header always set Access-Control-Expose-Headers "X-Cart-Session"
+    Header always set Access-Control-Expose-Headers "X-Cart-Session, X-WP-Total, X-WP-TotalPages"
     Header always set Access-Control-Allow-Credentials "true"
 </IfModule>
 

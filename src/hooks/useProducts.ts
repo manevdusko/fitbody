@@ -61,7 +61,10 @@ export const useProducts = (options: UseProductsOptions = {}) => {
         params.max_price = currentFilters.priceRange[1];
       }
 
+      console.log('Loading products with params:', params);
       const { products: newProducts, meta: newMeta } = await productsApi.getAll(params);
+      
+      console.log('Products loaded:', newProducts.length, 'Meta:', newMeta);
       
       if (page === 1) {
         setProducts(newProducts);
