@@ -388,7 +388,7 @@ const AboutPage: React.FC = () => {
               </h2>
             </motion.div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 justify-items-center">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 justify-items-center">
               {/* Зоран */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
@@ -510,6 +510,35 @@ const AboutPage: React.FC = () => {
                       </div>
                       <span>@monja_mm</span>
                     </a>
+                  </div>
+                </div>
+              </motion.div>
+
+              {/* Благица */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.3 }}
+                className="bg-gray-900 rounded-2xl p-8 border border-gray-800 max-w-md w-full"
+              >
+                <div className="text-center">
+                  <div className="w-32 h-32 mx-auto mb-6 rounded-full overflow-hidden">
+                    <Image 
+                      src={getImagePath('/assets/about/blagica.jpeg')} 
+                      alt="Благица Василова" 
+                      width={128} 
+                      height={128} 
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <h3 className="text-2xl font-bold text-white mb-2">Благица Василова</h3>
+                  <p className="text-brandGold font-semibold mb-2">Team Member</p>
+                  <div className="text-sm text-gray-300 mb-4 text-center space-y-1">
+                    <p>🏆 IFBB National Champion</p>
+                    <p>Bikini Fitness Junior &apos;26</p>
+                    <p>🏆 IFBB National Champion</p>
+                    <p>Bikini Fitness Teens &apos;26</p>
                   </div>
                 </div>
               </motion.div>
